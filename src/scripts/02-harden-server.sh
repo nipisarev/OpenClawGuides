@@ -52,7 +52,7 @@ else
 fi
 
 # Ensure SSH is allowed (critical — otherwise we lose access)
-if ! ufw status | grep -q "22/tcp"; then
+if ! ufw status | grep -qE "(^22(/tcp)?[[:space:]]|OpenSSH|^SSH[[:space:]])"; then
     ufw allow 22/tcp
     verify_ufw_rule "22/tcp" || { log_error "SSH rule not confirmed in UFW — aborting"; exit 1; }
     log_info "Allowed SSH (port 22/tcp)."
@@ -61,7 +61,7 @@ else
 fi
 
 # Allow Tailscale UDP port
-if ! ufw status | grep -q "41641/udp"; then
+if ! ufw status | grep -qE "^41641(/udp)?[[:space:]]"; then
     ufw allow 41641/udp
     log_info "Allowed Tailscale (port 41641/udp)."
 else

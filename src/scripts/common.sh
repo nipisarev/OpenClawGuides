@@ -219,13 +219,22 @@ verify_ssh_access() {
 
 verify_ufw_rule() {
     local rule="$1"
-    if ufw status | grep -q "$rule"; then
-        log_success "UFW rule found: ${rule}"
+    local port="${rule%%/*}"
+
+    # Check multiple output formats: "22/tcp", "22", "OpenSSH", port in numbered list
+    if ufw status | grep -qE "(^${port}(/tcp|/udp)?[[:space:]]|OpenSSH|^SSH[[:space:]])"; then
+        log_success "UFW rule confirmed: ${rule}"
         return 0
-    else
-        log_error "UFW rule NOT found: ${rule}"
-        return 1
     fi
+
+    # Fallback: check ufw show added for raw rules
+    if ufw show added 2>/dev/null | grep -q "${port}"; then
+        log_success "UFW rule confirmed (via show added): ${rule}"
+        return 0
+    fi
+
+    log_error "UFW rule NOT found: ${rule}"
+    return 1
 }
 
 verify_service() {
