@@ -17,6 +17,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
+# Allow env vars to be pre-set (e.g. from install.sh) — skip prompts when set
+AI_PROVIDER="${AI_PROVIDER:-}"
+AI_MODEL="${AI_MODEL:-}"
+KEY_NAME="${KEY_NAME:-}"
+API_KEY="${API_KEY:-}"
+TELEGRAM_TOKEN="${TELEGRAM_TOKEN:-}"
+
 TOTAL_STEPS=5
 
 # This script should NOT run as root — OpenClaw runs as a regular user
@@ -43,44 +50,59 @@ echo ""
 # ── Step 1: AI Provider API Key ─────────────────────────────────────────────
 step 1 $TOTAL_STEPS "Configuring AI provider"
 
-echo ""
-echo -e "  Which AI provider do you want to use?"
-echo -e "    ${BOLD}1)${NC} Anthropic (Claude) — recommended"
-echo -e "    ${BOLD}2)${NC} OpenAI (GPT-4o)"
-echo ""
+if [[ -n "$AI_PROVIDER" && -n "$API_KEY" ]]; then
+    log_info "Using pre-configured AI provider: ${AI_PROVIDER}"
 
-PROVIDER_CHOICE=$(prompt_input "Enter choice (1 or 2)" "1")
+    # Derive defaults if not explicitly set
+    if [[ "$AI_PROVIDER" == "anthropic" ]]; then
+        AI_MODEL="${AI_MODEL:-anthropic/claude-sonnet-4-20250514}"
+        KEY_NAME="${KEY_NAME:-anthropicApiKey}"
+    elif [[ "$AI_PROVIDER" == "openai" ]]; then
+        AI_MODEL="${AI_MODEL:-openai/gpt-4o}"
+        KEY_NAME="${KEY_NAME:-openaiApiKey}"
+    fi
 
-case "$PROVIDER_CHOICE" in
-    1)
-        AI_PROVIDER="anthropic"
-        AI_MODEL="anthropic/claude-sonnet-4-20250514"
-        KEY_NAME="anthropicApiKey"
-        echo ""
-        echo -e "  ${BLUE}Get your API key at:${NC} ${BOLD}https://console.anthropic.com${NC}"
-        echo -e "  Go to API Keys > Create Key > Copy the key"
-        echo ""
-        API_KEY=$(prompt_input "Paste your Anthropic API key (starts with sk-ant-)")
-        ;;
-    2)
-        AI_PROVIDER="openai"
-        AI_MODEL="openai/gpt-4o"
-        KEY_NAME="openaiApiKey"
-        echo ""
-        echo -e "  ${BLUE}Get your API key at:${NC} ${BOLD}https://platform.openai.com${NC}"
-        echo -e "  Go to API keys > Create new secret key > Copy the key"
-        echo ""
-        API_KEY=$(prompt_input "Paste your OpenAI API key (starts with sk-)")
-        ;;
-    *)
-        log_error "Invalid choice. Please enter 1 or 2."
+    log_info "Using model: ${AI_MODEL}"
+else
+    echo ""
+    echo -e "  Which AI provider do you want to use?"
+    echo -e "    ${BOLD}1)${NC} Anthropic (Claude) — recommended"
+    echo -e "    ${BOLD}2)${NC} OpenAI (GPT-4o)"
+    echo ""
+
+    PROVIDER_CHOICE=$(prompt_input "Enter choice (1 or 2)" "1")
+
+    case "$PROVIDER_CHOICE" in
+        1)
+            AI_PROVIDER="anthropic"
+            AI_MODEL="anthropic/claude-sonnet-4-20250514"
+            KEY_NAME="anthropicApiKey"
+            echo ""
+            echo -e "  ${BLUE}Get your API key at:${NC} ${BOLD}https://console.anthropic.com${NC}"
+            echo -e "  Go to API Keys > Create Key > Copy the key"
+            echo ""
+            API_KEY=$(prompt_input "Paste your Anthropic API key (starts with sk-ant-)")
+            ;;
+        2)
+            AI_PROVIDER="openai"
+            AI_MODEL="openai/gpt-4o"
+            KEY_NAME="openaiApiKey"
+            echo ""
+            echo -e "  ${BLUE}Get your API key at:${NC} ${BOLD}https://platform.openai.com${NC}"
+            echo -e "  Go to API keys > Create new secret key > Copy the key"
+            echo ""
+            API_KEY=$(prompt_input "Paste your OpenAI API key (starts with sk-)")
+            ;;
+        *)
+            log_error "Invalid choice. Please enter 1 or 2."
+            exit 1
+            ;;
+    esac
+
+    if [[ -z "$API_KEY" ]]; then
+        log_error "API key cannot be empty."
         exit 1
-        ;;
-esac
-
-if [[ -z "$API_KEY" ]]; then
-    log_error "API key cannot be empty."
-    exit 1
+    fi
 fi
 
 # Configure the model and API key
@@ -99,20 +121,24 @@ log_success "AI provider configured: ${AI_MODEL}"
 # ── Step 2: Telegram Bot Token ───────────────────────────────────────────────
 step 2 $TOTAL_STEPS "Configuring Telegram bot"
 
-echo ""
-echo -e "  Create a Telegram bot via ${BOLD}@BotFather${NC}:"
-echo -e "    1. Open Telegram and search for ${BOLD}@BotFather${NC} (with blue checkmark)"
-echo -e "    2. Send ${BOLD}/newbot${NC}"
-echo -e "    3. Choose a display name (e.g. 'My AI Assistant')"
-echo -e "    4. Choose a username ending in 'bot' (e.g. 'my_ai_helper_bot')"
-echo -e "    5. Copy the token BotFather gives you"
-echo ""
+if [[ -n "$TELEGRAM_TOKEN" ]]; then
+    log_info "Using pre-configured Telegram bot token."
+else
+    echo ""
+    echo -e "  Create a Telegram bot via ${BOLD}@BotFather${NC}:"
+    echo -e "    1. Open Telegram and search for ${BOLD}@BotFather${NC} (with blue checkmark)"
+    echo -e "    2. Send ${BOLD}/newbot${NC}"
+    echo -e "    3. Choose a display name (e.g. 'My AI Assistant')"
+    echo -e "    4. Choose a username ending in 'bot' (e.g. 'my_ai_helper_bot')"
+    echo -e "    5. Copy the token BotFather gives you"
+    echo ""
 
-TELEGRAM_TOKEN=$(prompt_input "Paste your Telegram bot token (format: 123456789:AAF...)")
+    TELEGRAM_TOKEN=$(prompt_input "Paste your Telegram bot token (format: 123456789:AAF...)")
 
-if [[ -z "$TELEGRAM_TOKEN" ]]; then
-    log_error "Telegram bot token cannot be empty."
-    exit 1
+    if [[ -z "$TELEGRAM_TOKEN" ]]; then
+        log_error "Telegram bot token cannot be empty."
+        exit 1
+    fi
 fi
 
 # Validate token format (basic check)

@@ -243,31 +243,41 @@ fi
 if [[ "$TS_CONNECTED" == "true" ]]; then
     TS_IP=$(tailscale ip -4)
     log_warn "Tailscale already connected. IP: ${TS_IP}"
-elif [[ -n "$TAILSCALE_AUTH_KEY" ]]; then
-    log_info "Connecting to Tailscale with provided auth key..."
-    tailscale up --authkey="$TAILSCALE_AUTH_KEY"
-    TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || true)
-    if [[ -z "$TAILSCALE_IP" ]]; then
-        log_warn "Tailscale IP not assigned — VPN may not be fully connected"
-    else
-        if ping -c 1 -W 5 "$TAILSCALE_IP" &>/dev/null; then
-            log_success "Tailscale connectivity verified (IP: $TAILSCALE_IP)"
-        else
-            log_warn "Tailscale IP assigned ($TAILSCALE_IP) but ping failed — check network"
-        fi
-    fi
-    TS_IP=$(tailscale ip -4 2>/dev/null || echo "unknown")
-    log_success "Tailscale connected. IP: ${TS_IP}"
 else
-    log_info "No TAILSCALE_AUTH_KEY provided."
-    echo ""
-    echo -e "  ${YELLOW}To connect Tailscale, run one of:${NC}"
-    echo ""
-    echo -e "    ${BOLD}sudo tailscale up${NC}                     # interactive (opens auth URL)"
-    echo -e "    ${BOLD}sudo tailscale up --authkey=tskey-...${NC}  # non-interactive"
-    echo ""
-    echo -e "  Get an auth key at: ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
-    TS_IP="(not connected)"
+    # Prompt for auth key if not provided and running interactively
+    if [[ -z "$TAILSCALE_AUTH_KEY" && -t 0 ]]; then
+        echo ""
+        echo -e "  ${BLUE}Get an auth key at:${NC} ${BOLD}https://login.tailscale.com/admin/settings/keys${NC}"
+        echo ""
+        TAILSCALE_AUTH_KEY=$(prompt_input "Enter Tailscale auth key (or leave empty to skip)")
+    fi
+
+    if [[ -n "$TAILSCALE_AUTH_KEY" ]]; then
+        log_info "Connecting to Tailscale with provided auth key..."
+        tailscale up --authkey="$TAILSCALE_AUTH_KEY"
+        TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || true)
+        if [[ -z "$TAILSCALE_IP" ]]; then
+            log_warn "Tailscale IP not assigned — VPN may not be fully connected"
+        else
+            if ping -c 1 -W 5 "$TAILSCALE_IP" &>/dev/null; then
+                log_success "Tailscale connectivity verified (IP: $TAILSCALE_IP)"
+            else
+                log_warn "Tailscale IP assigned ($TAILSCALE_IP) but ping failed — check network"
+            fi
+        fi
+        TS_IP=$(tailscale ip -4 2>/dev/null || echo "unknown")
+        log_success "Tailscale connected. IP: ${TS_IP}"
+    else
+        log_info "No Tailscale auth key provided."
+        echo ""
+        echo -e "  ${YELLOW}To connect Tailscale, run one of:${NC}"
+        echo ""
+        echo -e "    ${BOLD}sudo tailscale up${NC}                     # interactive (opens auth URL)"
+        echo -e "    ${BOLD}sudo tailscale up --authkey=tskey-...${NC}  # non-interactive"
+        echo ""
+        echo -e "  Get an auth key at: ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
+        TS_IP="(not connected)"
+    fi
 fi
 
 verify_ssh_access || log_warn "SSH access check failed at end of hardening — verify manually before closing this terminal!"
