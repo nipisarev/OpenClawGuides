@@ -1,0 +1,103 @@
+{
+  "$schema": "https://openclaw.ai/schemas/2024-11/config.json",
+  "version": 1,
+
+  // --- Gateway Security ---
+  // Gateway binds to loopback only — accessible exclusively via Tailscale VPN.
+  // No services exposed to the public internet.
+  "gateway": {
+    "bind": "loopback",             // Listen on 127.0.0.1 only
+    "port": 18789,                  // Default Gateway port
+    "auth": {
+      "mode": "token",              // Token-based auth — no unauthenticated access
+      "token": "REPLACE_WITH_GENERATED_TOKEN"  // Generate with: openssl rand -hex 32
+    },
+    "trustedProxies": [],           // Empty = no reverse proxy. If using nginx/Caddy: ["127.0.0.1", "::1"]
+    "controlUi": {
+      "dangerouslyDisableDeviceAuth": false  // Keep device auth — prevents unauthorized UI access
+    }
+  },
+
+  // --- Agent Defaults: Sandbox & Tool Security ---
+  // All agents run in Docker containers with minimal permissions.
+  // Per-agent overrides can expand access selectively.
+  "agents": {
+    "defaults": {
+      "tools": {
+        "profile": "minimal"        // Bare minimum tools — expand per-agent as needed
+      },
+      "sandbox": {
+        "mode": "all",              // ALL tool execution runs inside Docker containers
+        "workspaceAccess": "none",  // No filesystem access (use "ro" if agents need file reading)
+        "docker": {
+          "memory": "512m",         // Per-agent memory limit — prevents single agent OOM
+          "cpus": "0.5"             // Per-agent CPU limit — fair scheduling
+        }
+      }
+    }
+  },
+
+  // --- Session Isolation ---
+  // Default "main" shares context between ALL users — catastrophic for multi-user bots.
+  // "per-channel-peer" isolates by both channel and sender.
+  "session": {
+    "dmScope": "per-channel-peer"   // Full isolation per channel + sender
+  },
+
+  // --- Logging with Redaction ---
+  // Strip sensitive data (tokens, keys, passwords) from tool execution logs.
+  "logging": {
+    "redactSensitive": "tools"      // Redact tool input/output from logs
+  },
+
+  // --- Browser Safety ---
+  // Disable browser JS evaluation to close code injection vector.
+  "browser": {
+    "evaluateEnabled": false        // No browser JavaScript evaluation
+  },
+
+  // --- Discovery ---
+  // VPS has no need for local network advertisement.
+  "discovery": {
+    "mdns": {
+      "mode": "off"                 // Don't advertise Gateway on network
+    }
+  },
+
+  // --- Plugin Safety ---
+  // No third-party code execution until explicitly needed.
+  "plugins": {
+    "enabled": false                // Enable only individually trusted plugins
+  },
+
+  // --- Command Safety ---
+  // Config changes only via CLI on VPS — not through chat.
+  "commands": {
+    "config": false                 // Disable /config set via chat
+  },
+
+  // --- Skills Safety (ClawHavoc mitigation) ---
+  // 824+ malicious ClawHub skills discovered. Manual audit required before install.
+  "skills": {
+    "autoInstall": false,           // Never auto-install skills from ClawHub
+    "trustedPublishers": []         // Whitelist trusted publishers explicitly after audit
+  },
+
+  // --- Channel Safety (IDPI mitigation) ---
+  // Disable link previews to prevent URL-based data exfiltration via messenger previews.
+  // Group chats get messaging-only tools — no execution, filesystem, or gateway admin.
+  "channels": {
+    "telegram": {
+      "linkPreview": false,         // Prevent URL-based data exfiltration via link previews
+      "groups": {
+        "*": {
+          "requireMention": true,   // Bot responds in groups only when mentioned
+          "tools": {
+            "allow": ["read", "message"],
+            "deny": ["exec", "write", "edit", "browser", "gateway", "nodes"]
+          }
+        }
+      }
+    }
+  }
+}

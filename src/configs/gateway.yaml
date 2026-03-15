@@ -1,0 +1,105 @@
+# gateway.yaml — Multi-agent Gateway configuration template
+#
+# All credentials use environment variable references (${AGENT_*}).
+# Never commit plaintext API keys. Use .env file or SecretRef.
+#
+# Agent definitions below are examples — adjust roles and models to your needs.
+
+gateway:
+  bind: loopback
+  port: 18789
+  auth:
+    mode: token
+
+agents:
+  defaults:
+    sandbox:
+      mode: all
+      scope: dedicated
+      docker: true
+    tools:
+      profile: minimal
+    workspaceAccess: none
+
+  definitions:
+    # Agent 1: General assistant — default for Telegram
+    agent-1:
+      model:
+        provider: anthropic
+        name: claude-sonnet-4-20250514
+      tools:
+        profile: minimal
+      sandbox:
+        mode: all
+        scope: dedicated
+        workspaceAccess: none
+      credentials:
+        anthropicApiKey: ${AGENT_1_ANTHROPIC_KEY}
+
+    # Agent 2: Coder — code generation and file operations
+    agent-2:
+      model:
+        provider: openai
+        name: gpt-4o
+      tools:
+        profile: coding
+        allow:
+          - file_read
+          - file_write
+          - shell_exec
+        deny:
+          - browser
+          - network_fetch
+      sandbox:
+        mode: all
+        scope: dedicated
+        workspaceAccess: rw
+        workspaceDir: /opt/openclaw/workspaces/coder
+      credentials:
+        openaiApiKey: ${AGENT_2_OPENAI_KEY}
+
+    # Agent 3: Reader — read-only document analysis (no execution tools)
+    agent-3:
+      model:
+        provider: anthropic
+        name: claude-sonnet-4-20250514
+      tools:
+        profile: minimal
+        allow:
+          - file_read
+        deny:
+          - file_write
+          - shell_exec
+          - browser
+      sandbox:
+        mode: all
+        scope: dedicated
+        workspaceAccess: ro
+      credentials:
+        anthropicApiKey: ${AGENT_3_ANTHROPIC_KEY}
+
+# Routing rules: map channels and commands to agents
+channels:
+  telegram:
+    defaultAgent: agent-1
+    agentRouting:
+      /coder: agent-2
+      /reader: agent-3
+    linkPreview: false
+    groups:
+      "*":
+        requireMention: true
+        tools:
+          allow:
+            - read
+            - message
+          deny:
+            - exec
+            - write
+            - edit
+            - browser
+            - gateway
+            - nodes
+
+  whatsapp:
+    defaultAgent: agent-1

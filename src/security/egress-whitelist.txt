@@ -1,0 +1,26 @@
+# Egress whitelist — allowed outbound domains for OpenClaw VPS
+# One domain per line. Used with DOCKER-USER iptables chain + ipset.
+#
+# Only these domains should be reachable from the server.
+# All other outbound traffic should be blocked by default.
+
+# AI model APIs
+api.openai.com              # OpenAI API
+api.anthropic.com           # Anthropic API
+
+# Messaging platforms
+api.telegram.org            # Telegram Bot API
+
+# Package registries
+registry.npmjs.org          # npm packages
+
+# Infrastructure
+download.docker.com         # Docker packages and images
+deb.nodesource.com          # Node.js apt repository
+
+# VPN
+tailscale.com               # Tailscale coordination server
+
+# Source control
+github.com                  # Git repos
+raw.githubusercontent.com   # Raw GitHub content (scripts, configs)

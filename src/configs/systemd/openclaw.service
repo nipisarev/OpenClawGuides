@@ -1,0 +1,31 @@
+[Unit]
+Description=OpenClaw Gateway — Self-hosted AI Assistant Platform
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=openclaw
+Group=openclaw
+WorkingDirectory=/opt/openclaw
+EnvironmentFile=-/opt/openclaw/.env
+Environment=NODE_OPTIONS=--max-old-space-size=1536
+ExecStart=/usr/bin/openclaw gateway run
+Restart=always
+RestartSec=5
+WatchdogSec=30
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/openclaw /home/openclaw/.openclaw
+ProtectHome=read-only
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw
+
+[Install]
+WantedBy=multi-user.target

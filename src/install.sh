@@ -1,0 +1,336 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ──────────────────────────────────────────────────────────────────────────────
+# OpenClaw Hardened VPS Installer
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/openclaw/openclaw-guides/main/src/install.sh | bash
+#
+# This is the main entry point that:
+#   1. Detects the OS (Ubuntu 22.04+ or Debian 12+)
+#   2. Prints a welcome banner
+#   3. Collects required information (Tailscale key, AI provider, API key, bot token)
+#   4. Downloads the repo to /opt/openclaw-guides
+#   5. Runs Phases 01-04 sequentially
+#   6. Shows a final summary with Tailscale IP and next steps
+#
+# Run as root on a fresh server.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Inline colors & logging (before common.sh is available) ──────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+log_info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
+log_warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
+log_error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+
+TOTAL_PHASES=4
+INSTALL_DIR="/opt/openclaw-guides"
+SCRIPTS_DIR="${INSTALL_DIR}/src/scripts"
+REPO_URL="https://github.com/openclaw/openclaw-guides.git"
+
+# ── Preflight checks ────────────────────────────────────────────────────────
+
+# Must be root
+if [[ $EUID -ne 0 ]]; then
+    log_error "This installer must be run as root."
+    echo -e "  Run: ${BOLD}sudo bash${NC} or ${BOLD}sudo su -${NC} first."
+    exit 1
+fi
+
+# Detect OS
+if [[ ! -f /etc/os-release ]]; then
+    log_error "Cannot detect OS. Only Ubuntu 22.04+ and Debian 12+ are supported."
+    exit 1
+fi
+
+# shellcheck disable=SC1091
+source /etc/os-release
+
+OS_ID="${ID:-unknown}"
+OS_VERSION_ID="${VERSION_ID:-0}"
+OS_CODENAME="${VERSION_CODENAME:-unknown}"
+
+case "$OS_ID" in
+    ubuntu)
+        if [[ "${OS_VERSION_ID%%.*}" -lt 22 ]]; then
+            log_error "Ubuntu ${OS_VERSION_ID} is not supported. Minimum: 22.04."
+            exit 1
+        fi
+        ;;
+    debian)
+        if [[ "${OS_VERSION_ID%%.*}" -lt 12 ]]; then
+            log_error "Debian ${OS_VERSION_ID} is not supported. Minimum: 12."
+            exit 1
+        fi
+        ;;
+    *)
+        log_error "Unsupported OS: ${OS_ID}. Only Ubuntu 22.04+ and Debian 12+ are supported."
+        exit 1
+        ;;
+esac
+
+# ── Welcome banner ───────────────────────────────────────────────────────────
+
+clear 2>/dev/null || true
+echo -e "${BOLD}${BLUE}"
+cat << 'BANNER'
+
+   ___                    ____ _
+  / _ \ _ __   ___ _ __  / ___| | __ ___      __
+ | | | | '_ \ / _ \ '_ \| |   | |/ _` \ \ /\ / /
+ | |_| | |_) |  __/ | | | |___| | (_| |\ V  V /
+  \___/| .__/ \___|_| |_|\____|_|\__,_| \_/\_/
+       |_|
+
+BANNER
+echo -e "${NC}"
+echo -e "  ${BOLD}Hardened VPS Installer${NC} — Self-hosted AI Assistant"
+echo ""
+echo -e "  OS detected: ${BOLD}${OS_ID} ${OS_VERSION_ID}${NC} (${OS_CODENAME})"
+echo ""
+echo -e "  This installer will:"
+echo -e "    1. Set up your server (user, packages, timezone)"
+echo -e "    2. Harden security (firewall, fail2ban, SSH, VPN)"
+echo -e "    3. Install OpenClaw (Node.js, Docker, config)"
+echo -e "    4. Configure your first AI agent (Telegram bot)"
+echo ""
+echo -e "  Estimated time: ${BOLD}15-25 minutes${NC}"
+echo ""
+echo -e "  ${YELLOW}You will need:${NC}"
+echo -e "    - Tailscale auth key (get at https://login.tailscale.com/admin/settings/keys)"
+echo -e "    - AI provider API key (Anthropic or OpenAI)"
+echo -e "    - Telegram bot token (from @BotFather)"
+echo ""
+
+# ── Collect information ──────────────────────────────────────────────────────
+
+read -rp "$(echo -e "${YELLOW}?${NC} Press Enter to start, or Ctrl+C to cancel... ")"
+echo ""
+
+# Tailscale auth key
+echo -e "${BOLD}Tailscale VPN${NC}"
+echo -e "  Create an auth key at: ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
+echo -e "  (Click 'Generate auth key', copy the tskey-auth-... value)"
+echo ""
+read -rp "$(echo -e "${BLUE}?${NC} Tailscale auth key (tskey-auth-...): ")" TAILSCALE_AUTH_KEY
+echo ""
+
+# AI Provider
+echo -e "${BOLD}AI Provider${NC}"
+echo -e "  1) Anthropic (Claude) — recommended"
+echo -e "  2) OpenAI (GPT-4o)"
+echo ""
+read -rp "$(echo -e "${BLUE}?${NC} Choose provider [1]: ")" AI_CHOICE
+AI_CHOICE="${AI_CHOICE:-1}"
+
+case "$AI_CHOICE" in
+    1)
+        AI_PROVIDER="anthropic"
+        AI_MODEL="anthropic/claude-sonnet-4-20250514"
+        KEY_NAME="anthropicApiKey"
+        echo -e "  Get your key at: ${BLUE}https://console.anthropic.com${NC} > API Keys"
+        ;;
+    2)
+        AI_PROVIDER="openai"
+        AI_MODEL="openai/gpt-4o"
+        KEY_NAME="openaiApiKey"
+        echo -e "  Get your key at: ${BLUE}https://platform.openai.com${NC} > API keys"
+        ;;
+    *)
+        log_error "Invalid choice. Run the installer again."
+        exit 1
+        ;;
+esac
+
+echo ""
+read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY
+if [[ -z "$API_KEY" ]]; then
+    log_error "API key cannot be empty."
+    exit 1
+fi
+echo ""
+
+# Telegram bot token
+echo -e "${BOLD}Telegram Bot${NC}"
+echo -e "  Create a bot: open Telegram > search @BotFather > send /newbot"
+echo ""
+read -rp "$(echo -e "${BLUE}?${NC} Telegram bot token (123456789:AAF...): ")" TELEGRAM_TOKEN
+if [[ -z "$TELEGRAM_TOKEN" ]]; then
+    log_error "Telegram bot token cannot be empty."
+    exit 1
+fi
+echo ""
+
+# Export for child scripts
+export TAILSCALE_AUTH_KEY
+export AI_PROVIDER AI_MODEL KEY_NAME API_KEY
+export TELEGRAM_TOKEN
+
+# ── Download / clone the repository ──────────────────────────────────────────
+
+echo -e "${BOLD}${BLUE}[0/${TOTAL_PHASES}]${NC} ${BOLD}Preparing installer${NC}"
+echo ""
+
+if [[ -d "${INSTALL_DIR}/.git" ]]; then
+    log_info "Repository already exists at ${INSTALL_DIR}. Updating..."
+    cd "$INSTALL_DIR"
+    git pull --ff-only 2>/dev/null || log_warn "Could not update — using existing version."
+else
+    # Try git clone first, fall back to tarball
+    if command -v git &>/dev/null; then
+        log_info "Cloning repository to ${INSTALL_DIR}..."
+        git clone "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
+            log_warn "git clone failed. Trying tarball download..."
+            mkdir -p "$INSTALL_DIR"
+            curl -fsSL "https://github.com/openclaw/openclaw-guides/archive/refs/heads/main.tar.gz" | \
+                tar -xz --strip-components=1 -C "$INSTALL_DIR" 2>/dev/null || {
+                    log_error "Failed to download the repository. Check your internet connection."
+                    exit 1
+                }
+        }
+    else
+        # git not installed yet — use curl + tar
+        log_info "git not available yet. Downloading tarball..."
+        mkdir -p "$INSTALL_DIR"
+        curl -fsSL "https://github.com/openclaw/openclaw-guides/archive/refs/heads/main.tar.gz" | \
+            tar -xz --strip-components=1 -C "$INSTALL_DIR" 2>/dev/null || {
+                log_error "Failed to download the repository."
+                exit 1
+            }
+    fi
+fi
+
+# Verify scripts exist
+if [[ ! -f "${SCRIPTS_DIR}/common.sh" ]]; then
+    log_error "Installation scripts not found at ${SCRIPTS_DIR}/. Aborting."
+    exit 1
+fi
+
+log_success "Installer ready at ${INSTALL_DIR}"
+echo ""
+
+# ── Phase 1: Initial Server Setup ───────────────────────────────────────────
+
+echo -e "${BOLD}${BLUE}[1/${TOTAL_PHASES}]${NC} ${BOLD}Phase 1: Initial Server Setup${NC}"
+echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+bash "${SCRIPTS_DIR}/01-setup-server.sh"
+echo ""
+
+# ── Phase 2: Security Hardening ─────────────────────────────────────────────
+
+echo -e "${BOLD}${BLUE}[2/${TOTAL_PHASES}]${NC} ${BOLD}Phase 2: Security Hardening${NC}"
+echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+bash "${SCRIPTS_DIR}/02-harden-server.sh"
+echo ""
+
+# ── Phase 3: OpenClaw Installation ──────────────────────────────────────────
+
+echo -e "${BOLD}${BLUE}[3/${TOTAL_PHASES}]${NC} ${BOLD}Phase 3: OpenClaw Installation${NC}"
+echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+bash "${SCRIPTS_DIR}/03-install-openclaw.sh"
+echo ""
+
+# ── Phase 4: First Agent Setup ──────────────────────────────────────────────
+
+echo -e "${BOLD}${BLUE}[4/${TOTAL_PHASES}]${NC} ${BOLD}Phase 4: First Agent Setup${NC}"
+echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Phase 4 runs as the openclaw user — pass collected info via env vars
+OPENCLAW_HOME=$(eval echo "~openclaw")
+export PATH="$PATH:$(sudo -u openclaw bash -c 'pnpm bin -g 2>/dev/null || echo ""')"
+
+# Configure agent directly since Phase 4 normally prompts interactively
+log_info "Configuring first agent..."
+
+sudo -u openclaw bash -c "
+    export PATH=\"\$PATH:\$(pnpm bin -g 2>/dev/null || echo '')\"
+
+    # Set AI model
+    openclaw config set agents.defaults.model '${AI_MODEL}' 2>/dev/null || true
+
+    # Set API key
+    openclaw config set 'agents.defaults.credentials.${KEY_NAME}' '${API_KEY}' 2>/dev/null || true
+
+    # Set security defaults
+    openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
+    openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
+    openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
+
+    # Add Telegram channel
+    openclaw channels add telegram --token '${TELEGRAM_TOKEN}' 2>/dev/null || true
+
+    # Disable link previews
+    openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
+" 2>/dev/null || log_warn "Some agent configuration steps may need manual attention."
+
+# Start the Gateway
+log_info "Starting OpenClaw Gateway..."
+systemctl start openclaw 2>/dev/null || {
+    sudo -u openclaw bash -c '
+        export PATH="$PATH:$(pnpm bin -g 2>/dev/null || echo "")"
+        openclaw gateway run &
+    ' 2>/dev/null || true
+}
+
+sleep 3
+log_success "Phase 4 complete."
+echo ""
+
+# ── Final Summary ────────────────────────────────────────────────────────────
+
+TS_IP=$(tailscale ip -4 2>/dev/null || echo "(run 'tailscale up' to connect)")
+
+echo -e "${GREEN}"
+cat << 'DONE'
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                 Installation Complete!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DONE
+echo -e "${NC}"
+
+echo -e "  ${BOLD}Tailscale IP:${NC}     ${TS_IP}"
+echo -e "  ${BOLD}AI Provider:${NC}      ${AI_PROVIDER}"
+echo -e "  ${BOLD}Model:${NC}            ${AI_MODEL}"
+echo -e "  ${BOLD}Channel:${NC}          Telegram"
+echo -e "  ${BOLD}Gateway:${NC}          127.0.0.1:18789 (loopback only)"
+echo -e "  ${BOLD}Config:${NC}           ${OPENCLAW_HOME}/.openclaw/openclaw.json5"
+echo -e "  ${BOLD}Service:${NC}          systemctl status openclaw"
+echo ""
+echo -e "  ${YELLOW}Test your bot:${NC}"
+echo -e "    Open Telegram and send a message to your bot."
+echo -e "    You should get an AI response within 5-15 seconds."
+echo ""
+echo -e "  ${YELLOW}SSH via Tailscale (recommended):${NC}"
+echo -e "    ssh openclaw@${TS_IP}"
+echo ""
+echo -e "  ${BOLD}Security summary:${NC}"
+echo -e "    UFW:        deny all, allow SSH + Tailscale"
+echo -e "    Fail2ban:   5 retries → 1h ban"
+echo -e "    SSH:        key-only, root disabled, config locked"
+echo -e "    Sandbox:    all (Docker isolation)"
+echo -e "    Session:    per-channel-peer (isolated)"
+echo -e "    Plugins:    disabled"
+echo ""
+echo -e "  ${YELLOW}Optional next steps (run manually):${NC}"
+echo ""
+echo -e "    ${BOLD}Multi-agent setup${NC} (3 specialized agents):"
+echo -e "      sudo bash ${SCRIPTS_DIR}/05-multi-agent.sh"
+echo ""
+echo -e "    ${BOLD}Maintenance automation${NC} (nightly audit + hourly backups):"
+echo -e "      sudo bash ${SCRIPTS_DIR}/06-maintenance.sh"
+echo ""
+echo -e "  ${YELLOW}Useful commands:${NC}"
+echo -e "    openclaw status            — is Gateway running?"
+echo -e "    openclaw logs              — view activity"
+echo -e "    openclaw doctor            — health check"
+echo -e "    openclaw security audit    — security check (50+ items)"
+echo -e "    openclaw update            — update to latest version"
+echo ""
