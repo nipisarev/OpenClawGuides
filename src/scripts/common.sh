@@ -106,10 +106,10 @@ prompt_input() {
     local result
 
     if [[ -n "$default_value" ]]; then
-        read -rp "$(echo -e "${BLUE}?${NC} ${prompt_text} [${default_value}]: ")" result
+        read -rp "$(echo -e "${BLUE}?${NC} ${prompt_text} [${default_value}]: ")" result < /dev/tty
         echo "${result:-$default_value}"
     else
-        read -rp "$(echo -e "${BLUE}?${NC} ${prompt_text}: ")" result
+        read -rp "$(echo -e "${BLUE}?${NC} ${prompt_text}: ")" result < /dev/tty
         echo "$result"
     fi
 }
@@ -129,7 +129,7 @@ confirm() {
     fi
 
     local answer
-    read -rp "$(echo -e "${YELLOW}?${NC} ${prompt_text} [${yn_hint}]: ")" answer
+    read -rp "$(echo -e "${YELLOW}?${NC} ${prompt_text} [${yn_hint}]: ")" answer < /dev/tty
     answer="${answer:-$default}"
 
     case "${answer,,}" in

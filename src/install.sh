@@ -135,7 +135,7 @@ echo ""
 
 # ── Collect information ──────────────────────────────────────────────────────
 
-read -rp "$(echo -e "${YELLOW}?${NC} Press Enter to start, or Ctrl+C to cancel... ")"
+read -rp "$(echo -e "${YELLOW}?${NC} Press Enter to start, or Ctrl+C to cancel... ")" < /dev/tty
 echo ""
 
 # Tailscale auth key
@@ -143,7 +143,7 @@ echo -e "${BOLD}Tailscale VPN${NC}"
 echo -e "  Create an auth key at: ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
 echo -e "  (Click 'Generate auth key', copy the tskey-auth-... value)"
 echo ""
-read -rp "$(echo -e "${BLUE}?${NC} Tailscale auth key (tskey-auth-...): ")" TAILSCALE_AUTH_KEY
+read -rp "$(echo -e "${BLUE}?${NC} Tailscale auth key (tskey-auth-...): ")" TAILSCALE_AUTH_KEY < /dev/tty
 echo ""
 
 # AI Provider
@@ -151,7 +151,7 @@ echo -e "${BOLD}AI Provider${NC}"
 echo -e "  1) Anthropic (Claude) — recommended"
 echo -e "  2) OpenAI (GPT-4o)"
 echo ""
-read -rp "$(echo -e "${BLUE}?${NC} Choose provider [1]: ")" AI_CHOICE
+read -rp "$(echo -e "${BLUE}?${NC} Choose provider [1]: ")" AI_CHOICE < /dev/tty
 AI_CHOICE="${AI_CHOICE:-1}"
 
 case "$AI_CHOICE" in
@@ -174,7 +174,7 @@ case "$AI_CHOICE" in
 esac
 
 echo ""
-read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY
+read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY < /dev/tty
 if [[ -z "$API_KEY" ]]; then
     log_error "API key cannot be empty."
     exit 1
@@ -185,7 +185,7 @@ echo ""
 echo -e "${BOLD}Telegram Bot${NC}"
 echo -e "  Create a bot: open Telegram > search @BotFather > send /newbot"
 echo ""
-read -rp "$(echo -e "${BLUE}?${NC} Telegram bot token (123456789:AAF...): ")" TELEGRAM_TOKEN
+read -rp "$(echo -e "${BLUE}?${NC} Telegram bot token (123456789:AAF...): ")" TELEGRAM_TOKEN < /dev/tty
 if [[ -z "$TELEGRAM_TOKEN" ]]; then
     log_error "Telegram bot token cannot be empty."
     exit 1
