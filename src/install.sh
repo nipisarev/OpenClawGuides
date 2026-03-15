@@ -5,7 +5,7 @@ set -euo pipefail
 # OpenClaw Hardened VPS Installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/openclaw/openclaw-guides/main/src/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nipisarev/OpenClawGuides/main/src/install.sh | bash
 #
 # This is the main entry point that:
 #   1. Detects the OS (Ubuntu 22.04+ or Debian 12+)
@@ -57,7 +57,7 @@ run_phase() {
 TOTAL_PHASES=4
 INSTALL_DIR="/opt/openclaw-guides"
 SCRIPTS_DIR="${INSTALL_DIR}/src/scripts"
-REPO_URL="https://github.com/openclaw/openclaw-guides.git"
+REPO_URL="https://github.com/nipisarev/OpenClawGuides.git"
 
 # ── Preflight checks ────────────────────────────────────────────────────────
 
@@ -213,7 +213,7 @@ else
         git clone "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
             log_warn "git clone failed. Trying tarball download..."
             mkdir -p "$INSTALL_DIR"
-            curl -fsSL "https://github.com/openclaw/openclaw-guides/archive/refs/heads/main.tar.gz" | \
+            curl -fsSL "https://github.com/nipisarev/OpenClawGuides/archive/refs/heads/main.tar.gz" | \
                 tar -xz --strip-components=1 -C "$INSTALL_DIR" 2>/dev/null || {
                     log_error "Failed to download the repository. Check your internet connection."
                     exit 1
@@ -223,7 +223,7 @@ else
         # git not installed yet — use curl + tar
         log_info "git not available yet. Downloading tarball..."
         mkdir -p "$INSTALL_DIR"
-        curl -fsSL "https://github.com/openclaw/openclaw-guides/archive/refs/heads/main.tar.gz" | \
+        curl -fsSL "https://github.com/nipisarev/OpenClawGuides/archive/refs/heads/main.tar.gz" | \
             tar -xz --strip-components=1 -C "$INSTALL_DIR" 2>/dev/null || {
                 log_error "Failed to download the repository."
                 exit 1
