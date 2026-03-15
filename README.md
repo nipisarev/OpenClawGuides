@@ -18,9 +18,13 @@ This repo provides battle-tested scripts and step-by-step guides for deploying O
 curl -fsSL https://raw.githubusercontent.com/nipisarev/OpenClawGuides/main/src/install.sh | bash
 ```
 
+> If installation fails during Phase 2 (security hardening), the script automatically rolls back changes to prevent lockout. Keep your SSH session open during this phase.
+
 ## Features
 
 - Automated server hardening (UFW, Fail2ban, SSH lockdown, chattr)
+- Automatic rollback on failure -- SSH, UFW, and config changes are reverted if setup fails mid-way
+- Pre-validation before locking -- sshd_config and SSH keys validated before chattr immutability
 - Tailscale VPN mesh networking
 - Node.js 22 + Docker + OpenClaw installation
 - Telegram bot integration
@@ -40,6 +44,14 @@ Five layers of defense are applied during installation:
 | 3 | System | Unattended upgrades + chattr immutable configs |
 | 4 | Application | Session isolation + resource limits |
 | 5 | Monitoring | Nightly audit cron (13 checks) + Telegram alerts |
+
+### Safety Mechanisms
+
+- Trap handler auto-rollback: reverts UFW rules, SSH config, and chattr locks on script failure
+- Timestamped config backups with automatic rotation (keeps last 3)
+- SSH connectivity verification before and after dangerous operations
+- UFW rule verification after enable -- auto-disables firewall if SSH rule is lost
+- Guides include mandatory stop points for manual verification
 
 ## Guides
 
