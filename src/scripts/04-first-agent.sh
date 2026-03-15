@@ -85,14 +85,14 @@ fi
 
 # Configure the model and API key
 log_info "Setting AI model to ${AI_MODEL}..."
-openclaw config set agents.defaults.model "$AI_MODEL" 2>/dev/null || true
+openclaw config set agents.defaults.model "$AI_MODEL"
 
 log_info "Saving API key securely..."
-openclaw config set "agents.defaults.credentials.${KEY_NAME}" "$API_KEY" 2>/dev/null || true
+openclaw config set "agents.defaults.credentials.${KEY_NAME}" "$API_KEY"
 
 # Enable full sandbox isolation
-openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
-openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
+openclaw config set agents.defaults.sandbox.mode all
+openclaw config set agents.defaults.tools.profile minimal
 
 log_success "AI provider configured: ${AI_MODEL}"
 
@@ -130,7 +130,7 @@ openclaw channels add telegram --token "$TELEGRAM_TOKEN" 2>/dev/null || {
 }
 
 # Disable link previews to prevent data exfiltration (IDPI mitigation)
-openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
+openclaw config set channels.telegram.linkPreview false
 
 log_success "Telegram bot configured."
 
@@ -138,9 +138,9 @@ log_success "Telegram bot configured."
 step 3 $TOTAL_STEPS "Applying agent security settings"
 
 # These may already be set in the config file from Phase 3, but ensure via CLI
-openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
-openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
-openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
+openclaw config set agents.defaults.sandbox.mode all
+openclaw config set agents.defaults.tools.profile minimal
+openclaw config set session.dmScope per-channel-peer
 
 log_success "Agent security: sandbox=all, tools=minimal, session=per-channel-peer"
 

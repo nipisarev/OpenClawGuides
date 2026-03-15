@@ -71,6 +71,8 @@ if [[ ! -f "$AUDIT_SCRIPT" ]]; then
             cp "${REPO_SCRIPTS_DIR}/common.sh" "$COMMON_TARGET"
         fi
 
+        mkdir -p /opt/openclaw/scripts
+        cp "$SCRIPT_DIR/common.sh" /opt/openclaw/scripts/ 2>/dev/null || true
         log_success "Deployed nightly audit script from ${AUDIT_TEMPLATE}"
     else
         log_error "Audit template not found at ${AUDIT_TEMPLATE}"
@@ -85,7 +87,7 @@ fi
 if [[ ! -f "${BASELINES_DIR}/ports.baseline" ]]; then
     log_info "Generating initial security baselines..."
     bash "$AUDIT_SCRIPT" --init-baselines 2>/dev/null || {
-        log_warn "Baseline generation had issues — will be retried on first cron run."
+        log_warn "Baseline generation had issues — will be retried on first cron run"
     }
     log_success "Baselines generated in ${BASELINES_DIR}/"
 else
@@ -185,8 +187,8 @@ echo ""
 # Run initial backup to verify the script works
 log_info "Running initial brain backup to verify..."
 sudo -u "$OPENCLAW_USER" bash "$BACKUP_SCRIPT" 2>/dev/null || {
-    bash "$BACKUP_SCRIPT" 2>/dev/null || true
-    chown -R "${OPENCLAW_USER}:${OPENCLAW_USER}" "$BACKUP_DIR" 2>/dev/null || true
+    bash "$BACKUP_SCRIPT" 2>/dev/null || log_warn "Initial backup run had issues — will be retried on first cron run"
+    chown -R "${OPENCLAW_USER}:${OPENCLAW_USER}" "$BACKUP_DIR" 2>/dev/null || log_warn "Could not set backup directory ownership"
 }
 log_success "Initial backup complete."
 

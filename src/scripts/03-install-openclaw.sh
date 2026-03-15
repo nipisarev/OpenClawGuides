@@ -293,6 +293,10 @@ WantedBy=multi-user.target
 EOF
         log_info "systemd unit created."
     fi
+
+    if command -v systemd-analyze &>/dev/null; then
+        systemd-analyze verify openclaw.service 2>/dev/null || log_warn "systemd unit verification produced warnings"
+    fi
 fi
 
 # Apply resource limits via drop-in override
@@ -322,6 +326,10 @@ fi
 # Reload systemd and enable the service
 systemctl daemon-reload
 systemctl enable openclaw
+systemctl is-enabled --quiet openclaw || {
+    log_error "Service openclaw failed to enable"
+    exit 1
+}
 log_success "OpenClaw systemd service installed and enabled."
 
 # ── Step 8: Session isolation ────────────────────────────────────────────────

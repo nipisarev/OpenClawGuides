@@ -170,6 +170,67 @@ check_antipatterns() {
     fi
 }
 
+# ── Test 6: Safety functions exist in common.sh ───────────────────────────
+test_safety_functions() {
+    local common_sh="$REPO_ROOT/src/scripts/common.sh"
+    local functions=(backup_config restore_config verify_ssh_access verify_ufw_rule verify_service safe_chattr setup_trap_handler)
+    local missing=0
+
+    for func in "${functions[@]}"; do
+        if ! grep -q "^${func}()" "$common_sh" 2>/dev/null; then
+            fail "Safety function '${func}' not found in common.sh"
+            ((missing++))
+        fi
+    done
+
+    if [[ $missing -eq 0 ]]; then
+        pass "All 7 safety functions present in common.sh"
+        return 0
+    else
+        fail "$missing safety function(s) missing from common.sh"
+        return 1
+    fi
+}
+
+# ── Test 7: 02-harden-server.sh uses safety functions ────────────────────
+test_harden_uses_safety() {
+    local harden_sh="$REPO_ROOT/src/scripts/02-harden-server.sh"
+    local has_pass=true
+
+    grep -q "verify_ufw_rule" "$harden_sh" || { fail "02-harden-server.sh missing verify_ufw_rule call"; has_pass=false; }
+    grep -q "verify_ssh_access" "$harden_sh" || { fail "02-harden-server.sh missing verify_ssh_access call"; has_pass=false; }
+    grep -q "safe_chattr" "$harden_sh" || { fail "02-harden-server.sh missing safe_chattr call"; has_pass=false; }
+
+    if $has_pass; then
+        pass "02-harden-server.sh uses all required safety functions"
+        return 0
+    fi
+    return 1
+}
+
+# ── Test 8: No bare chattr +i outside safe_chattr definition ─────────────
+test_no_bare_chattr() {
+    local has_pass=true
+
+    for script in "$REPO_ROOT"/src/scripts/[0-9]*.sh; do
+        local bare_count
+        bare_count=$(grep -c "chattr +i" "$script" 2>/dev/null) || bare_count=0
+        local safe_count
+        safe_count=$(grep -c "safe_chattr" "$script" 2>/dev/null) || safe_count=0
+
+        if [[ $bare_count -gt 0 && $safe_count -eq 0 ]]; then
+            fail "$(basename "$script") has bare 'chattr +i' without safe_chattr"
+            has_pass=false
+        fi
+    done
+
+    if $has_pass; then
+        pass "No bare chattr +i found outside safe_chattr usage"
+        return 0
+    fi
+    return 1
+}
+
 # ── Run all checks ──────────────────────────────────────────────────────────
 echo ""
 log_info "OpenClaw Security Validation"
@@ -185,6 +246,12 @@ echo ""
 check_strict_mode
 echo ""
 check_antipatterns
+echo ""
+test_safety_functions
+echo ""
+test_harden_uses_safety
+echo ""
+test_no_bare_chattr
 
 echo ""
 echo "─────────────────────────────────────────────"

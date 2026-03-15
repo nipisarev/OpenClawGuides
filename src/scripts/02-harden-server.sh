@@ -24,6 +24,9 @@ TAILSCALE_AUTH_KEY="${TAILSCALE_AUTH_KEY:-}"
 check_root
 check_ubuntu
 
+setup_trap_handler
+_SCRIPT_PHASE="hardening"
+
 print_banner
 echo -e "${BOLD}Phase 2: Security Hardening${NC}"
 echo ""
@@ -51,6 +54,7 @@ fi
 # Ensure SSH is allowed (critical — otherwise we lose access)
 if ! ufw status | grep -q "22/tcp"; then
     ufw allow 22/tcp
+    verify_ufw_rule "22/tcp" || { log_error "SSH rule not confirmed in UFW — aborting"; exit 1; }
     log_info "Allowed SSH (port 22/tcp)."
 else
     log_warn "SSH (port 22/tcp) already allowed."
@@ -68,6 +72,8 @@ fi
 if ! ufw status | grep -qi "Status: active"; then
     log_info "Enabling UFW..."
     echo "y" | ufw enable
+    _UFW_ENABLED_BY_US=true
+    verify_ufw_rule "22/tcp" || { log_error "SSH rule lost after UFW enable — disabling firewall"; ufw --force disable; exit 1; }
 fi
 
 log_success "UFW configured: deny incoming, allow SSH (22/tcp) + Tailscale (41641/udp)."
@@ -120,6 +126,9 @@ SSHD_CONFIG="/etc/ssh/sshd_config"
 # Remove immutable flag if previously set (so we can edit)
 chattr -i "$SSHD_CONFIG" 2>/dev/null || true
 
+backup_config /etc/ssh/sshd_config
+_SSHD_MODIFIED=true
+
 # Backup before changes
 if [[ ! -f "${SSHD_CONFIG}.backup-openclaw" ]]; then
     cp "$SSHD_CONFIG" "${SSHD_CONFIG}.backup-openclaw"
@@ -155,6 +164,14 @@ sshd_set "KbdInteractiveAuthentication" "no"
 # Validate configuration before restart
 if sshd -t 2>/dev/null; then
     systemctl restart sshd
+    log_warn "DO NOT close this terminal session until SSH access is verified"
+    verify_ssh_access || {
+        log_error "SSH access broken after config change — rolling back"
+        restore_config /etc/ssh/sshd_config
+        systemctl restart sshd
+        exit 1
+    }
+    log_success "SSH access verified after config change"
     log_success "SSH hardened and restarted (key-only auth, no root login)."
 else
     log_error "SSH config validation failed! Restoring backup..."
@@ -169,13 +186,13 @@ step 4 $TOTAL_STEPS "Locking SSH configuration with chattr +i"
 if lsattr "$SSHD_CONFIG" 2>/dev/null | grep -q "\-i\-"; then
     log_warn "sshd_config is already immutable."
 else
-    chattr +i "$SSHD_CONFIG"
+    safe_chattr "$SSHD_CONFIG"
     log_success "sshd_config locked — cannot be modified without 'chattr -i' first."
 fi
 
 # Also lock root authorized_keys if it exists
 if [[ -f /root/.ssh/authorized_keys ]]; then
-    chattr +i /root/.ssh/authorized_keys 2>/dev/null || true
+    safe_chattr /root/.ssh/authorized_keys || log_warn "Could not lock root authorized_keys"
     log_info "root authorized_keys locked."
 fi
 
@@ -229,6 +246,16 @@ if [[ "$TS_CONNECTED" == "true" ]]; then
 elif [[ -n "$TAILSCALE_AUTH_KEY" ]]; then
     log_info "Connecting to Tailscale with provided auth key..."
     tailscale up --authkey="$TAILSCALE_AUTH_KEY"
+    TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || true)
+    if [[ -z "$TAILSCALE_IP" ]]; then
+        log_warn "Tailscale IP not assigned — VPN may not be fully connected"
+    else
+        if ping -c 1 -W 5 "$TAILSCALE_IP" &>/dev/null; then
+            log_success "Tailscale connectivity verified (IP: $TAILSCALE_IP)"
+        else
+            log_warn "Tailscale IP assigned ($TAILSCALE_IP) but ping failed — check network"
+        fi
+    fi
     TS_IP=$(tailscale ip -4 2>/dev/null || echo "unknown")
     log_success "Tailscale connected. IP: ${TS_IP}"
 else
@@ -242,6 +269,8 @@ else
     echo -e "  Get an auth key at: ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
     TS_IP="(not connected)"
 fi
+
+verify_ssh_access || log_warn "SSH access check failed at end of hardening — verify manually before closing this terminal!"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""

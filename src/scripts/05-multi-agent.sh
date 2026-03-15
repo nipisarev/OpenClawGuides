@@ -243,7 +243,7 @@ for dir in "${SEARCH_DIRS[@]}"; do
             if lsattr "$filepath" 2>/dev/null | grep -q "\-i\-"; then
                 log_warn "${filepath} is already immutable."
             else
-                chattr +i "$filepath"
+                safe_chattr "$filepath"
                 log_info "Protected: ${filepath} (chattr +i)"
                 ((PROTECTED_COUNT++))
             fi
@@ -286,6 +286,10 @@ systemctl restart openclaw 2>/dev/null || {
 }
 
 sleep 3
+verify_service openclaw || {
+    log_error "OpenClaw service failed to start after restart"
+    exit 1
+}
 
 # Verify
 sudo -u "$OPENCLAW_USER" bash -c '

@@ -31,6 +31,29 @@ log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
 log_warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
+source "$(dirname "$0")/scripts/common.sh" 2>/dev/null || true
+
+run_phase() {
+    local phase_num="$1"
+    local phase_name="$2"
+    local phase_script="$3"
+
+    log_info "Starting Phase $phase_num: $phase_name"
+
+    if ! bash "$phase_script"; then
+        log_error "Phase $phase_num ($phase_name) failed!"
+        if [[ "$phase_num" == "2" ]]; then
+            log_error "CRITICAL: Phase 2 failure may affect SSH access"
+            log_error "Verify you can still SSH into the server before taking any action"
+            log_error "If locked out, use your VPS provider's web console"
+        fi
+        log_error "Fix the issue and re-run: bash $phase_script"
+        return 1
+    fi
+
+    log_success "Phase $phase_num ($phase_name) completed"
+}
+
 TOTAL_PHASES=4
 INSTALL_DIR="/opt/openclaw-guides"
 SCRIPTS_DIR="${INSTALL_DIR}/src/scripts"
@@ -221,21 +244,28 @@ echo ""
 
 echo -e "${BOLD}${BLUE}[1/${TOTAL_PHASES}]${NC} ${BOLD}Phase 1: Initial Server Setup${NC}"
 echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-bash "${SCRIPTS_DIR}/01-setup-server.sh"
+run_phase 1 "Initial Setup" "${SCRIPTS_DIR}/01-setup-server.sh"
 echo ""
+
+log_info "Verifying SSH connectivity before security hardening..."
+if type verify_ssh_access &>/dev/null && ! verify_ssh_access; then
+    log_error "SSH access verification failed — cannot proceed with security hardening"
+    log_error "Ensure SSH is working before running Phase 2"
+    exit 1
+fi
 
 # ── Phase 2: Security Hardening ─────────────────────────────────────────────
 
 echo -e "${BOLD}${BLUE}[2/${TOTAL_PHASES}]${NC} ${BOLD}Phase 2: Security Hardening${NC}"
 echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-bash "${SCRIPTS_DIR}/02-harden-server.sh"
+run_phase 2 "Security Hardening" "${SCRIPTS_DIR}/02-harden-server.sh"
 echo ""
 
 # ── Phase 3: OpenClaw Installation ──────────────────────────────────────────
 
 echo -e "${BOLD}${BLUE}[3/${TOTAL_PHASES}]${NC} ${BOLD}Phase 3: OpenClaw Installation${NC}"
 echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-bash "${SCRIPTS_DIR}/03-install-openclaw.sh"
+run_phase 3 "OpenClaw Installation" "${SCRIPTS_DIR}/03-install-openclaw.sh"
 echo ""
 
 # ── Phase 4: First Agent Setup ──────────────────────────────────────────────

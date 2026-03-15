@@ -463,6 +463,25 @@ Internet
 Your server — secured
 ```
 
+### Safety Prerequisites (READ BEFORE STARTING PHASE 2)
+
+Before making any security changes, prepare your escape hatch:
+
+1. **Know your VPS provider's web console URL** — this is your last resort if you lock yourself out:
+   - Hetzner: https://console.hetzner.cloud
+   - DigitalOcean: https://cloud.digitalocean.com
+   - Aeza: https://my.aeza.net
+2. **Open the web console in a separate browser tab RIGHT NOW** before proceeding. Verify you can access it.
+3. **RULE: NEVER close your current SSH session during Phase 2.** All testing must happen in NEW terminal windows. Your original session is your lifeline.
+
+#### Safety Checkpoints
+
+| After Step | Check | If Failed |
+|-----------|-------|-----------|
+| UFW enable | Can you SSH from a NEW terminal? | Run `sudo ufw disable` in your ORIGINAL terminal |
+| SSH restart | Key login works AND password is denied? | Restore backup in original terminal (see instructions below) |
+| Before chattr | Can you SSH from 2+ different devices/networks? | Fix access before locking config |
+
 ### Steps
 
 #### Step 1. Configure the UFW firewall
@@ -510,6 +529,11 @@ Rules updated
 Rules updated (v6)
 ```
 
+> **⚠️ CRITICAL: DO NOT CLOSE YOUR CURRENT SSH SESSION**
+>
+> After enabling UFW, test connectivity from a **NEW** terminal window.
+> Keep your current session open as a lifeline until you confirm access works.
+
 **1.4. Enable the firewall:**
 
 ```bash
@@ -525,6 +549,17 @@ Firewall is active and enabled on system startup
 ```
 
 The firewall will now start automatically on every server reboot.
+
+> **🛑 STOP POINT — Verify SSH Access**
+>
+> Open a **new terminal** and try to SSH into your server:
+> ```bash
+> ssh openclaw@YOUR_SERVER_IP
+> ```
+> - ✅ If it works: proceed to the next step
+> - ❌ If it fails: run `sudo ufw disable` in your **original** terminal, then troubleshoot
+>
+> **Do NOT proceed until this test passes.**
 
 ---
 
@@ -668,6 +703,11 @@ Replace `100.x.y.z` with the address from step 3.4, and `your_user` with your us
 
 If the connection was successful, you have reached the server through a private tunnel.
 
+> **Verify Tailscale from multiple networks:**
+> - Test from your home WiFi
+> - Test from mobile data (phone hotspot)
+> - Both connections must work before relying on Tailscale as your primary access method
+
 ---
 
 #### Step 4. Set up automatic security updates
@@ -695,6 +735,9 @@ sudo unattended-upgrade --dry-run
 ```
 
 The `--dry-run` flag means "dry run" — the command will show what it *would* update, but will not change anything. If the command completes without errors, auto-updates are configured correctly.
+
+> **Note:** Unattended upgrades may occasionally restart SSH. This is normal but can briefly interrupt connections.
+> Monitor the log at `/var/log/unattended-upgrades/` if you experience unexpected disconnections.
 
 ---
 
@@ -747,7 +790,35 @@ Permission denied (publickey).
 
 This means the server denied password access — exactly what we need.
 
+> **🛑 STOP POINT — Verify SSH Configuration**
+>
+> Run TWO tests from a new terminal:
+>
+> **Test A — Key authentication must work:**
+> ```bash
+> ssh openclaw@YOUR_SERVER_IP
+> ```
+> Expected: login succeeds without password prompt
+>
+> **Test B — Password authentication must be denied:**
+> ```bash
+> ssh -o PubkeyAuthentication=no openclaw@YOUR_SERVER_IP
+> ```
+> Expected: `Permission denied (publickey)` error
+>
+> **Both tests must pass before proceeding. If Test A fails, restore the SSH backup:**
+> ```bash
+> sudo chattr -i /etc/ssh/sshd_config  # if already locked
+> sudo cp /etc/ssh/sshd_config.backup-openclaw-* /etc/ssh/sshd_config
+> sudo systemctl restart sshd
+> ```
+
 ---
+
+> **⚠️ BEFORE LOCKING SSH CONFIG**
+>
+> Test SSH access from at least 2 different devices or networks before making the configuration immutable.
+> After `chattr +i`, the ONLY way to modify SSH config is via the VPS web console.
 
 #### Step 6. Protecting configuration files from modification
 
@@ -1033,6 +1104,12 @@ openclaw onboard --install-daemon
 
 The `onboard` command launches an interactive initial setup wizard. The `--install-daemon` flag additionally registers OpenClaw as a systemd service (daemon — a background process that runs continuously, not tied to your terminal session).
 
+Verify the service is properly enabled:
+```bash
+systemctl is-enabled openclaw
+```
+Expected output: `enabled`
+
 Proceed to step 6 (common for both paths).
 
 ---
@@ -1170,6 +1247,12 @@ openclaw onboard --install-daemon
 
 The wizard will ask several questions. The `--install-daemon` flag will register OpenClaw as a systemd service — the operating system's service manager that automatically starts OpenClaw on server boot and restarts it on failures.
 
+Verify the service is properly enabled:
+```bash
+systemctl is-enabled openclaw
+```
+Expected output: `enabled`
+
 ---
 
 ### Common Steps (for both paths)
@@ -1262,6 +1345,8 @@ Do not close the file — first generate the token (step 7), insert it, and only
 In Node.js (the runtime that OpenClaw runs on), there is a known memory leak issue (Issue #13758 — the Gateway can consume up to 1.9 GB of memory after 13 hours of continuous operation). A memory leak is when a program requests memory from the system but never returns it, as if you were taking plates from a cabinet but never putting them back — eventually the cabinet empties.
 
 To prevent the Gateway from "eating" all the server's memory, we limit its resources via systemd:
+
+> **⚠️ Memory limits are NOT optional.** Skipping this configuration can cause a 13-hour memory exhaustion crash that brings down your entire VPS. Always configure the resource limits as shown above.
 
 ```bash
 # Add Node.js memory limit to systemd service

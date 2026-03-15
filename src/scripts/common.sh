@@ -167,3 +167,134 @@ BANNER
     echo -e "  ${BOLD}Hardened VPS Setup${NC} — Self-hosted AI Assistant"
     echo ""
 }
+
+# ── Global state (for trap handler) ──────────────────────────────────────────
+_UFW_ENABLED_BY_US=false
+_SSHD_MODIFIED=false
+_CHATTR_FILES=()
+_SCRIPT_PHASE=""
+
+# ── Safety functions ─────────────────────────────────────────────────────────
+
+backup_config() {
+    local file="$1"
+    local backup="${file}.backup-openclaw-$(date +%Y%m%d-%H%M%S)"
+
+    cp -a "$file" "$backup"
+    log_info "Backed up ${file} -> ${backup}"
+
+    local old_backups
+    old_backups=$(ls -1t "${file}.backup-openclaw-"* 2>/dev/null | tail -n +4)
+    if [[ -n "$old_backups" ]]; then
+        echo "$old_backups" | while read -r f; do
+            rm -f "$f"
+            log_info "Removed old backup: ${f}"
+        done
+    fi
+}
+
+restore_config() {
+    local file="$1"
+    local latest
+    latest=$(ls -1t "${file}.backup-openclaw-"* 2>/dev/null | head -n 1)
+
+    if [[ -z "$latest" ]]; then
+        log_error "No backup found for ${file}"
+        return 1
+    fi
+
+    cp -a "$latest" "$file"
+    log_success "Restored ${file} from ${latest}"
+}
+
+verify_ssh_access() {
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no localhost exit 2>/dev/null; then
+        log_success "SSH access to localhost verified"
+        return 0
+    else
+        log_error "SSH access to localhost failed"
+        return 1
+    fi
+}
+
+verify_ufw_rule() {
+    local rule="$1"
+    if ufw status | grep -q "$rule"; then
+        log_success "UFW rule found: ${rule}"
+        return 0
+    else
+        log_error "UFW rule NOT found: ${rule}"
+        return 1
+    fi
+}
+
+verify_service() {
+    local service="$1"
+    local attempt=1
+
+    while (( attempt <= 5 )); do
+        if systemctl is-active --quiet "$service"; then
+            log_success "Service ${service} is active (attempt ${attempt}/5)"
+            return 0
+        fi
+        log_warn "Service ${service} not active yet (attempt ${attempt}/5), retrying..."
+        sleep 2
+        (( attempt++ ))
+    done
+
+    log_error "Service ${service} failed to become active after 5 attempts"
+    return 1
+}
+
+safe_chattr() {
+    local file="$1"
+
+    if [[ "$file" == *sshd_config* ]]; then
+        if ! sshd -t 2>/dev/null; then
+            log_error "sshd config validation failed — refusing to lock ${file}"
+            return 1
+        fi
+    fi
+
+    if [[ "$file" == *authorized_keys* ]]; then
+        if ! ssh-keygen -l -f "$file" >/dev/null 2>&1; then
+            log_error "SSH key validation failed — refusing to lock ${file}"
+            return 1
+        fi
+    fi
+
+    chattr +i "$file"
+    _CHATTR_FILES+=("$file")
+    log_success "Locked ${file} (chattr +i)"
+}
+
+setup_trap_handler() {
+    _cleanup_on_failure() {
+        local exit_code=$?
+        if [[ $exit_code -eq 0 ]]; then
+            return
+        fi
+
+        log_warn "Script failed (exit code ${exit_code}) — starting rollback..."
+
+        if [[ ${#_CHATTR_FILES[@]} -gt 0 ]]; then
+            for f in "${_CHATTR_FILES[@]}"; do
+                chattr -i "$f" 2>/dev/null && log_info "Unlocked ${f} (chattr -i)"
+            done
+        fi
+
+        if [[ "$_SSHD_MODIFIED" == true ]]; then
+            log_info "Restoring sshd_config..."
+            restore_config /etc/ssh/sshd_config && systemctl restart sshd
+        fi
+
+        if [[ "$_UFW_ENABLED_BY_US" == true ]]; then
+            log_info "Disabling UFW..."
+            ufw --force disable
+        fi
+
+        log_warn "Rollback complete"
+    }
+
+    trap _cleanup_on_failure EXIT ERR
+}

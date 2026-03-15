@@ -87,6 +87,21 @@ else
         chmod 600 "${SSH_DIR}/authorized_keys" 2>/dev/null || true
         log_success "SSH directory permissions set (700/600)."
     fi
+
+    if [[ ! -s "$OPENCLAW_HOME/.ssh/authorized_keys" ]]; then
+        log_error "authorized_keys is empty after copy — SSH key setup failed"
+        exit 1
+    fi
+    if ! grep -q "^ssh-" "$OPENCLAW_HOME/.ssh/authorized_keys" 2>/dev/null; then
+        log_error "authorized_keys does not contain valid SSH public key lines"
+        exit 1
+    fi
+
+    ssh-keygen -l -f "$OPENCLAW_HOME/.ssh/authorized_keys" &>/dev/null || {
+        log_error "SSH key validation failed — keys may be corrupt"
+        exit 1
+    }
+    log_success "SSH keys validated successfully"
 fi
 
 # ── Step 4: Install essential packages ───────────────────────────────────────
@@ -122,6 +137,13 @@ else
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
+
+log_warn "═══════════════════════════════════════════════════════"
+log_warn "IMPORTANT: Test SSH login as 'openclaw' user NOW"
+log_warn "  ssh openclaw@$(hostname -I | awk '{print $1}')"
+log_warn "DO NOT proceed to Phase 2 until this works!"
+log_warn "═══════════════════════════════════════════════════════"
+
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN} Phase 1 complete!${NC}"

@@ -42,7 +42,7 @@ validate_json5() {
         # Strip single-line comments (//) and try parsing as JSON.
         # This is a lightweight check — for full JSON5 validation use a dedicated parser.
         local stripped
-        stripped=$(sed 's|//.*$||' "$file" | sed 's|,\s*}|}|g' | sed 's|,\s*]|]|g')
+        stripped=$(sed '/^[[:space:]]*\/\//d; s|[[:space:]]//[[:space:]].*$||' "$file" | sed 's|,\s*}|}|g' | sed 's|,\s*]|]|g')
 
         if echo "$stripped" | python3 -m json.tool > /dev/null 2>&1; then
             pass "JSON5 syntax OK: ${basename}"
@@ -51,7 +51,7 @@ validate_json5() {
             if command -v node &>/dev/null; then
                 if node -e "
                     const fs = require('fs');
-                    try { JSON.parse(fs.readFileSync('${file}', 'utf8').replace(/\/\/.*/g,'').replace(/,(\s*[}\]])/g,'\$1')); process.exit(0); }
+                    try { JSON.parse(fs.readFileSync('${file}', 'utf8').replace(/^\s*\/\/.*$/gm,'').replace(/\s\/\/\s.*$/gm,'').replace(/,(\s*[}\]])/g,'\$1')); process.exit(0); }
                     catch(e) { process.exit(1); }
                 " 2>/dev/null; then
                     pass "JSON5 syntax OK: ${basename} (via node)"
