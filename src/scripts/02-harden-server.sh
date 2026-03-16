@@ -27,6 +27,13 @@ check_ubuntu
 setup_trap_handler
 _SCRIPT_PHASE="hardening"
 
+# Detect SSH service name (Ubuntu 24.04+ uses ssh.service, older uses sshd.service)
+if systemctl list-unit-files ssh.service &>/dev/null && systemctl list-unit-files ssh.service | grep -q ssh.service; then
+    SSH_SERVICE="ssh"
+else
+    SSH_SERVICE="sshd"
+fi
+
 print_banner
 echo -e "${BOLD}Phase 2: Security Hardening${NC}"
 echo ""
@@ -163,12 +170,12 @@ sshd_set "KbdInteractiveAuthentication" "no"
 
 # Validate configuration before restart
 if sshd -t 2>/dev/null; then
-    systemctl restart sshd
+    systemctl restart "$SSH_SERVICE"
     log_warn "DO NOT close this terminal session until SSH access is verified"
     verify_ssh_access || {
         log_error "SSH access broken after config change — rolling back"
         restore_config /etc/ssh/sshd_config
-        systemctl restart sshd
+        systemctl restart "$SSH_SERVICE"
         exit 1
     }
     log_success "SSH access verified after config change"
@@ -176,7 +183,7 @@ if sshd -t 2>/dev/null; then
 else
     log_error "SSH config validation failed! Restoring backup..."
     cp "${SSHD_CONFIG}.backup-openclaw" "$SSHD_CONFIG"
-    systemctl restart sshd
+    systemctl restart "$SSH_SERVICE"
     exit 1
 fi
 

@@ -294,7 +294,7 @@ setup_trap_handler() {
 
         if [[ "$_SSHD_MODIFIED" == true ]]; then
             log_info "Restoring sshd_config..."
-            restore_config /etc/ssh/sshd_config && systemctl restart sshd
+            restore_config /etc/ssh/sshd_config && systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null
         fi
 
         if [[ "$_UFW_ENABLED_BY_US" == true ]]; then
