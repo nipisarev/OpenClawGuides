@@ -265,11 +265,26 @@ SYSTEMD_OVERRIDE_DIR="/etc/systemd/system/openclaw.service.d"
 # Check for systemd template in the repo
 SYSTEMD_TEMPLATE="${SCRIPT_DIR}/../configs/systemd/openclaw.service"
 
+# Determine the openclaw binary path
+OC_BIN=$(sudo -u "$OPENCLAW_USER" bash -c '
+    export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+    export PATH="$PNPM_HOME:$PATH"
+    command -v openclaw 2>/dev/null || echo ""
+')
+if [[ -z "$OC_BIN" ]]; then
+    log_error "openclaw binary not found in PATH"
+    exit 1
+fi
+
 if [[ -f "$SYSTEMD_UNIT" ]]; then
-    log_warn "systemd unit already exists at ${SYSTEMD_UNIT} — skipping overwrite."
+    # Update ExecStart path and fix namespace issues on re-run
+    log_info "Updating existing systemd unit (ExecStart=${OC_BIN})..."
+    sed -i "s|^ExecStart=.*|ExecStart=${OC_BIN} gateway run|" "$SYSTEMD_UNIT"
+    if ! systemd-run --quiet --property=PrivateTmp=yes --wait /bin/true 2>/dev/null; then
+        sed -i 's/^PrivateTmp=.*/#&/; s/^ProtectSystem=.*/#&/; s/^ProtectHome=.*/#&/' "$SYSTEMD_UNIT"
+    fi
+    systemctl daemon-reload
 else
-    # Determine the openclaw binary path
-    OC_BIN=$(sudo -u "$OPENCLAW_USER" bash -c 'command -v openclaw 2>/dev/null || echo "/usr/bin/openclaw"')
 
     if [[ -f "$SYSTEMD_TEMPLATE" ]]; then
         cp "$SYSTEMD_TEMPLATE" "$SYSTEMD_UNIT"
