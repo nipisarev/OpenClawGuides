@@ -27,12 +27,29 @@ check_ubuntu
 setup_trap_handler
 _SCRIPT_PHASE="hardening"
 
-# Detect SSH service name (Ubuntu 24.04+ uses ssh.service, older uses sshd.service)
-if systemctl list-unit-files ssh.service &>/dev/null && systemctl list-unit-files ssh.service | grep -q ssh.service; then
-    SSH_SERVICE="ssh"
-else
-    SSH_SERVICE="sshd"
+# Discover running SSH service
+SSH_SERVICE=""
+for candidate in ssh sshd openssh-server; do
+    if systemctl is-active --quiet "$candidate" 2>/dev/null; then
+        SSH_SERVICE="$candidate"
+        break
+    fi
+done
+if [[ -z "$SSH_SERVICE" ]]; then
+    # Not active — check which unit file exists
+    for candidate in ssh sshd openssh-server; do
+        if systemctl list-unit-files "${candidate}.service" 2>/dev/null | grep -q "${candidate}.service"; then
+            SSH_SERVICE="$candidate"
+            break
+        fi
+    done
 fi
+if [[ -z "$SSH_SERVICE" ]]; then
+    log_error "Cannot find SSH service. Checked: ssh, sshd, openssh-server"
+    exit 1
+fi
+log_info "SSH service detected: ${SSH_SERVICE}.service"
+export SSH_SERVICE
 
 print_banner
 echo -e "${BOLD}Phase 2: Security Hardening${NC}"
