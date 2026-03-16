@@ -208,13 +208,38 @@ restore_config() {
 }
 
 verify_ssh_access() {
-    if ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no localhost exit 2>/dev/null; then
-        log_success "SSH access to localhost verified"
-        return 0
-    else
-        log_error "SSH access to localhost failed"
-        return 1
-    fi
+    local port="${1:-22}"
+    local attempt=1
+
+    while (( attempt <= 3 )); do
+        # Check 1: Is the SSH service running?
+        local svc="${SSH_SERVICE:-ssh}"
+        if ! systemctl is-active --quiet "$svc" 2>/dev/null; then
+            log_warn "SSH service '${svc}' not active (attempt ${attempt}/3)"
+            sleep 2
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        # Check 2: Is sshd actually listening on the port?
+        if ss -tlnp 2>/dev/null | grep -q ":${port}[[:space:]]"; then
+            # Check 3: Is the config valid?
+            if sshd -t 2>/dev/null; then
+                log_success "SSH access verified (service active, listening on port ${port}, config valid)"
+                return 0
+            else
+                log_error "SSH config validation failed (sshd -t)"
+                return 1
+            fi
+        fi
+
+        log_warn "SSH not yet listening on port ${port} (attempt ${attempt}/3)"
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    log_error "SSH not listening on port ${port} after 3 attempts"
+    return 1
 }
 
 verify_ufw_rule() {
