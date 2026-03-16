@@ -138,10 +138,41 @@ echo ""
 ALREADY_INSTALLED=false
 if id openclaw &>/dev/null; then
     OPENCLAW_HOME=$(eval echo "~openclaw")
-    OPENCLAW_PNPM_BIN="${OPENCLAW_HOME}/.local/share/pnpm/openclaw"
-    if [[ -f "${OPENCLAW_HOME}/.openclaw/openclaw.json5" ]] && [[ -f "$OPENCLAW_PNPM_BIN" || -L "$OPENCLAW_PNPM_BIN" ]]; then
-        ALREADY_INSTALLED=true
+    echo -e "  ${BLUE}[detect]${NC} User 'openclaw' exists, home=${OPENCLAW_HOME}"
+
+    if [[ -f "${OPENCLAW_HOME}/.openclaw/openclaw.json5" ]]; then
+        echo -e "  ${BLUE}[detect]${NC} Config found: ${OPENCLAW_HOME}/.openclaw/openclaw.json5"
+
+        # Search for openclaw binary in known locations
+        OC_FOUND=""
+        for candidate in \
+            "${OPENCLAW_HOME}/.local/share/pnpm/openclaw" \
+            "/usr/local/bin/openclaw" \
+            "/usr/bin/openclaw" \
+            "${OPENCLAW_HOME}/.local/bin/openclaw"; do
+            if [[ -f "$candidate" || -L "$candidate" ]]; then
+                OC_FOUND="$candidate"
+                break
+            fi
+        done
+
+        # Fallback: find it anywhere in pnpm store
+        if [[ -z "$OC_FOUND" ]]; then
+            OC_FOUND=$(find "${OPENCLAW_HOME}/.local/share/pnpm" -name "openclaw" -type f 2>/dev/null | head -1)
+        fi
+
+        if [[ -n "$OC_FOUND" ]]; then
+            echo -e "  ${GREEN}[detect]${NC} Binary found: ${OC_FOUND}"
+            ALREADY_INSTALLED=true
+        else
+            echo -e "  ${YELLOW}[detect]${NC} Binary not found. Listing pnpm dir:"
+            ls -la "${OPENCLAW_HOME}/.local/share/pnpm/" 2>/dev/null || echo "    (directory does not exist)"
+        fi
+    else
+        echo -e "  ${YELLOW}[detect]${NC} No config at ${OPENCLAW_HOME}/.openclaw/openclaw.json5"
     fi
+else
+    echo -e "  ${BLUE}[detect]${NC} User 'openclaw' does not exist — fresh install."
 fi
 
 if [[ "$ALREADY_INSTALLED" == true ]]; then
