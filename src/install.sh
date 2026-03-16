@@ -205,8 +205,14 @@ echo ""
 if [[ -d "${INSTALL_DIR}/.git" ]]; then
     log_info "Repository already exists at ${INSTALL_DIR}. Updating..."
     cd "$INSTALL_DIR"
-    git pull --ff-only 2>/dev/null || log_warn "Could not update — using existing version."
-else
+    if ! git pull --ff-only 2>/dev/null; then
+        log_warn "Git pull failed — re-downloading fresh copy..."
+        cd /
+        rm -rf "$INSTALL_DIR"
+    fi
+fi
+
+if [[ ! -d "$INSTALL_DIR" ]]; then
     # Try git clone first, fall back to tarball
     if command -v git &>/dev/null; then
         log_info "Cloning repository to ${INSTALL_DIR}..."

@@ -153,12 +153,6 @@ chattr -i "$SSHD_CONFIG" 2>/dev/null || true
 backup_config /etc/ssh/sshd_config
 _SSHD_MODIFIED=true
 
-# Backup before changes
-if [[ ! -f "${SSHD_CONFIG}.backup-openclaw" ]]; then
-    cp "$SSHD_CONFIG" "${SSHD_CONFIG}.backup-openclaw"
-    log_info "Backup created at ${SSHD_CONFIG}.backup-openclaw"
-fi
-
 sshd_set() {
     local key="$1"
     local value="$2"
@@ -188,6 +182,7 @@ sshd_set "KbdInteractiveAuthentication" "no"
 # Validate configuration before restart
 if sshd -t 2>/dev/null; then
     systemctl restart "$SSH_SERVICE"
+    sleep 1
     log_warn "DO NOT close this terminal session until SSH access is verified"
     verify_ssh_access || {
         log_error "SSH access broken after config change — rolling back"
@@ -199,7 +194,7 @@ if sshd -t 2>/dev/null; then
     log_success "SSH hardened and restarted (key-only auth, no root login)."
 else
     log_error "SSH config validation failed! Restoring backup..."
-    cp "${SSHD_CONFIG}.backup-openclaw" "$SSHD_CONFIG"
+    restore_config /etc/ssh/sshd_config
     systemctl restart "$SSH_SERVICE"
     exit 1
 fi

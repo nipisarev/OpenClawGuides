@@ -173,6 +173,7 @@ _UFW_ENABLED_BY_US=false
 _SSHD_MODIFIED=false
 _CHATTR_FILES=()
 _SCRIPT_PHASE=""
+_CLEANUP_DONE=false
 
 # ── Safety functions ─────────────────────────────────────────────────────────
 
@@ -308,6 +309,9 @@ setup_trap_handler() {
         if [[ $exit_code -eq 0 ]]; then
             return
         fi
+
+        if [[ "${_CLEANUP_DONE:-false}" == true ]]; then return; fi
+        _CLEANUP_DONE=true
 
         log_warn "Script failed (exit code ${exit_code}) — starting rollback..."
 
