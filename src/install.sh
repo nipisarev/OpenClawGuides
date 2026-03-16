@@ -138,11 +138,9 @@ echo ""
 ALREADY_INSTALLED=false
 if id openclaw &>/dev/null; then
     OPENCLAW_HOME=$(eval echo "~openclaw")
-    if [[ -f "${OPENCLAW_HOME}/.openclaw/openclaw.json5" ]]; then
-        # Check if openclaw binary exists in user's PNPM_HOME or system PATH
-        if sudo -u openclaw bash -c 'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PATH"; command -v openclaw' &>/dev/null; then
-            ALREADY_INSTALLED=true
-        fi
+    OPENCLAW_PNPM_BIN="${OPENCLAW_HOME}/.local/share/pnpm/openclaw"
+    if [[ -f "${OPENCLAW_HOME}/.openclaw/openclaw.json5" ]] && [[ -f "$OPENCLAW_PNPM_BIN" || -L "$OPENCLAW_PNPM_BIN" ]]; then
+        ALREADY_INSTALLED=true
     fi
 fi
 
