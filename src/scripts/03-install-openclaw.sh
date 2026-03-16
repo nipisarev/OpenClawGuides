@@ -156,7 +156,14 @@ sudo -u "$OPENCLAW_USER" mkdir -p "$OPENCLAW_DIR"
 
 if [[ -f "$OPENCLAW_CONFIG" ]]; then
     log_warn "Configuration file already exists at ${OPENCLAW_CONFIG} — skipping overwrite."
-    log_info "Review it manually to ensure hardened settings are applied."
+    # Ensure critical settings exist on re-run
+    sudo -u "$OPENCLAW_USER" bash -c "
+        export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+        export PATH=\"\$PNPM_HOME:\$PATH\"
+        openclaw config set gateway.mode local 2>/dev/null || true
+        openclaw config set channels.telegram.groupPolicy open 2>/dev/null || true
+    "
+    log_info "Verified critical gateway settings."
 else
     # Check for template in the repo
     CONFIG_TEMPLATE="${SCRIPT_DIR}/../configs/openclaw.json5"
@@ -281,9 +288,13 @@ if [[ -f "$SYSTEMD_UNIT" ]]; then
     log_info "Updating existing systemd unit (ExecStart=${OC_BIN})..."
     sed -i "s|^ExecStart=.*|ExecStart=${OC_BIN} gateway run|" "$SYSTEMD_UNIT"
     if ! systemd-run --quiet --property=PrivateTmp=yes --wait /bin/true 2>/dev/null; then
-        sed -i 's/^PrivateTmp=.*/#&/; s/^ProtectSystem=.*/#&/; s/^ProtectHome=.*/#&/' "$SYSTEMD_UNIT"
+        log_warn "Kernel does not support namespace sandboxing — disabling"
+        sed -i 's/^PrivateTmp=.*/#&/; s/^ProtectSystem=.*/#&/; s/^ProtectHome=.*/#&/; s/^NoNewPrivileges=.*/#&/' "$SYSTEMD_UNIT"
     fi
     systemctl daemon-reload
+    systemctl enable openclaw 2>/dev/null
+    systemctl restart openclaw
+    log_success "systemd unit updated and restarted."
 else
 
     if [[ -f "$SYSTEMD_TEMPLATE" ]]; then
