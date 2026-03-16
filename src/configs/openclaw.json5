@@ -6,6 +6,7 @@
   // Gateway binds to loopback only — accessible exclusively via Tailscale VPN.
   // No services exposed to the public internet.
   "gateway": {
+    "mode": "local",                // Required — gateway won't start without a mode
     "bind": "loopback",             // Listen on 127.0.0.1 only
     "port": 18789,                  // Default Gateway port
     "auth": {
@@ -89,6 +90,7 @@
   "channels": {
     "telegram": {
       "linkPreview": false,         // Prevent URL-based data exfiltration via link previews
+      "groupPolicy": "open",        // Default to open — restrict per-group via "groups" below
       "groups": {
         "*": {
           "requireMention": true,   // Bot responds in groups only when mentioned

@@ -10,7 +10,7 @@ Group=openclaw
 WorkingDirectory=/opt/openclaw
 EnvironmentFile=-/opt/openclaw/.env
 Environment=NODE_OPTIONS=--max-old-space-size=1536
-ExecStart=/usr/bin/openclaw gateway run
+ExecStart=__OPENCLAW_BIN__ gateway run
 Restart=always
 RestartSec=5
 WatchdogSec=30

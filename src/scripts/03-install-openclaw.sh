@@ -173,6 +173,7 @@ else
   "version": 1,
 
   "gateway": {
+    "mode": "local",
     "bind": "loopback",
     "port": 18789,
     "auth": {
@@ -267,13 +268,14 @@ SYSTEMD_TEMPLATE="${SCRIPT_DIR}/../configs/systemd/openclaw.service"
 if [[ -f "$SYSTEMD_UNIT" ]]; then
     log_warn "systemd unit already exists at ${SYSTEMD_UNIT} — skipping overwrite."
 else
+    # Determine the openclaw binary path
+    OC_BIN=$(sudo -u "$OPENCLAW_USER" bash -c 'command -v openclaw 2>/dev/null || echo "/usr/bin/openclaw"')
+
     if [[ -f "$SYSTEMD_TEMPLATE" ]]; then
         cp "$SYSTEMD_TEMPLATE" "$SYSTEMD_UNIT"
-        log_info "Deployed systemd unit from template."
+        sed -i "s|__OPENCLAW_BIN__|${OC_BIN}|g" "$SYSTEMD_UNIT"
+        log_info "Deployed systemd unit from template (ExecStart=${OC_BIN})."
     else
-        # Determine the openclaw binary path
-        OC_BIN=$(sudo -u "$OPENCLAW_USER" bash -c 'command -v openclaw 2>/dev/null || echo "/usr/bin/openclaw"')
-
         cat > "$SYSTEMD_UNIT" << EOF
 [Unit]
 Description=OpenClaw Gateway
@@ -303,6 +305,12 @@ EOF
 
     if command -v systemd-analyze &>/dev/null; then
         systemd-analyze verify openclaw.service 2>/dev/null || log_warn "systemd unit verification produced warnings"
+    fi
+
+    # Test if systemd namespace features work on this kernel
+    if ! systemd-run --quiet --property=PrivateTmp=yes --wait /bin/true 2>/dev/null; then
+        log_warn "Kernel does not support systemd namespace sandboxing — disabling"
+        sed -i 's/^PrivateTmp=.*/#&/; s/^ProtectSystem=.*/#&/; s/^ProtectHome=.*/#&/' "$SYSTEMD_UNIT"
     fi
 fi
 
