@@ -272,7 +272,8 @@ step 5 $TOTAL_STEPS "Recreating sandboxes and restarting Gateway"
 # Recreate sandbox containers
 log_info "Recreating sandbox containers for all agents..."
 sudo -u "$OPENCLAW_USER" bash -c '
-    export PATH="$PATH:$(pnpm bin -g 2>/dev/null || echo "")"
+    export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+    export PATH="$PNPM_HOME:$PATH"
     openclaw sandbox recreate 2>/dev/null || echo "sandbox recreate: will be created on first use"
 '
 
@@ -280,7 +281,8 @@ sudo -u "$OPENCLAW_USER" bash -c '
 log_info "Restarting Gateway..."
 systemctl restart openclaw 2>/dev/null || {
     sudo -u "$OPENCLAW_USER" bash -c '
-        export PATH="$PATH:$(pnpm bin -g 2>/dev/null || echo "")"
+        export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+        export PATH="$PNPM_HOME:$PATH"
         openclaw gateway restart 2>/dev/null || true
     '
 }
@@ -293,7 +295,8 @@ verify_service openclaw || {
 
 # Verify
 sudo -u "$OPENCLAW_USER" bash -c '
-    export PATH="$PATH:$(pnpm bin -g 2>/dev/null || echo "")"
+    export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+    export PATH="$PNPM_HOME:$PATH"
     openclaw sandbox list 2>/dev/null || echo "Run: openclaw sandbox list"
 ' || true
 

@@ -281,13 +281,15 @@ echo -e "━━━━━━━━━━━━━━━━━━━━━━━�
 
 # Phase 4 runs as the openclaw user — pass collected info via env vars
 OPENCLAW_HOME=$(eval echo "~openclaw")
-export PATH="$PATH:$(sudo -u openclaw bash -c 'pnpm bin -g 2>/dev/null || echo ""')"
+OPENCLAW_PNPM_HOME=$(eval echo "~openclaw/.local/share/pnpm")
+export PATH="$OPENCLAW_PNPM_HOME:$PATH"
 
 # Configure agent directly since Phase 4 normally prompts interactively
 log_info "Configuring first agent..."
 
 sudo -u openclaw bash -c "
-    export PATH=\"\$PATH:\$(pnpm bin -g 2>/dev/null || echo '')\"
+    export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+    export PATH=\"\$PNPM_HOME:\$PATH\"
 
     # Set AI model
     openclaw config set agents.defaults.model '${AI_MODEL}' 2>/dev/null || true
@@ -311,7 +313,8 @@ sudo -u openclaw bash -c "
 log_info "Starting OpenClaw Gateway..."
 systemctl start openclaw 2>/dev/null || {
     sudo -u openclaw bash -c '
-        export PATH="$PATH:$(pnpm bin -g 2>/dev/null || echo "")"
+        export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+        export PATH="$PNPM_HOME:$PATH"
         openclaw gateway run &
     ' 2>/dev/null || true
 }

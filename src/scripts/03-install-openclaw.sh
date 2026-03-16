@@ -125,17 +125,23 @@ else
     log_info "Installing OpenClaw globally via pnpm..."
     sudo -u "$OPENCLAW_USER" bash -c "
         cd ~${OPENCLAW_USER}
-        export PATH=\"\$PATH:\$(pnpm bin -g 2>/dev/null || echo '')\"
+        # Ensure PNPM_HOME and global bin dir exist
+        export PNPM_HOME=\"\${HOME}/.local/share/pnpm\"
+        mkdir -p \"\$PNPM_HOME\"
+        export PATH=\"\$PNPM_HOME:\$PATH\"
+        pnpm setup 2>/dev/null || true
         pnpm install -g openclaw
     "
     log_success "OpenClaw installed."
 
-    # Ensure pnpm global bin is in PATH for the openclaw user
-    PNPM_BIN_LINE='export PATH="$PATH:$(pnpm bin -g 2>/dev/null || echo "")"'
+    # Ensure PNPM_HOME is in PATH for the openclaw user
     BASHRC="${OPENCLAW_HOME}/.bashrc"
-    if ! grep -qF "pnpm bin -g" "$BASHRC" 2>/dev/null; then
-        echo "$PNPM_BIN_LINE" >> "$BASHRC"
-        log_info "Added pnpm global bin to ${OPENCLAW_USER}'s PATH in .bashrc"
+    if ! grep -qF "PNPM_HOME" "$BASHRC" 2>/dev/null; then
+        {
+            echo 'export PNPM_HOME="${HOME}/.local/share/pnpm"'
+            echo 'export PATH="$PNPM_HOME:$PATH"'
+        } >> "$BASHRC"
+        log_info "Added PNPM_HOME to ${OPENCLAW_USER}'s PATH in .bashrc"
     fi
 fi
 

@@ -36,7 +36,8 @@ fi
 # Verify openclaw CLI is available
 if ! is_installed openclaw; then
     # Try adding pnpm global bin to PATH
-    export PATH="$PATH:$(pnpm bin -g 2>/dev/null || echo "")"
+    export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+    export PATH="$PNPM_HOME:$PATH"
     if ! is_installed openclaw; then
         log_error "openclaw CLI not found. Did Phase 3 complete successfully?"
         exit 1
