@@ -123,10 +123,11 @@ if sudo -u "$OPENCLAW_USER" bash -c 'command -v openclaw' &>/dev/null; then
     log_warn "OpenClaw is already installed: ${OC_VER}"
 else
     log_info "Installing OpenClaw globally via pnpm..."
-    sudo -u "$OPENCLAW_USER" bash -c '
-        export PATH="$PATH:$(pnpm bin -g 2>/dev/null || echo "")"
+    sudo -u "$OPENCLAW_USER" bash -c "
+        cd ~${OPENCLAW_USER}
+        export PATH=\"\$PATH:\$(pnpm bin -g 2>/dev/null || echo '')\"
         pnpm install -g openclaw
-    '
+    "
     log_success "OpenClaw installed."
 
     # Ensure pnpm global bin is in PATH for the openclaw user
