@@ -54,6 +54,16 @@ else
     log_success "User '${OPENCLAW_USER}' added to the sudo group."
 fi
 
+# Grant passwordless sudo (user has no password — sudo would always fail without this)
+SUDOERS_FILE="/etc/sudoers.d/90-openclaw"
+if [[ ! -f "$SUDOERS_FILE" ]]; then
+    echo "${OPENCLAW_USER} ALL=(ALL) NOPASSWD:ALL" > "$SUDOERS_FILE"
+    chmod 440 "$SUDOERS_FILE"
+    log_success "Passwordless sudo configured for '${OPENCLAW_USER}'."
+else
+    log_warn "Sudoers file already exists for '${OPENCLAW_USER}'."
+fi
+
 # ── Step 3: Set up SSH authorized_keys ───────────────────────────────────────
 step 3 $TOTAL_STEPS "Setting up SSH access for '${OPENCLAW_USER}'"
 
