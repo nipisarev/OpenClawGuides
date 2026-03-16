@@ -161,7 +161,6 @@ if [[ -f "$OPENCLAW_CONFIG" ]]; then
         export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
         export PATH=\"\$PNPM_HOME:\$PATH\"
         openclaw config set gateway.mode local 2>/dev/null || true
-        openclaw config set channels.telegram.groupPolicy open 2>/dev/null || true
     "
     log_info "Verified critical gateway settings."
 else
@@ -284,12 +283,49 @@ if [[ -z "$OC_BIN" ]]; then
 fi
 
 if [[ -f "$SYSTEMD_UNIT" ]]; then
-    # Update ExecStart path and fix namespace issues on re-run
-    log_info "Updating existing systemd unit (ExecStart=${OC_BIN})..."
-    sed -i "s|^ExecStart=.*|ExecStart=${OC_BIN} gateway run|" "$SYSTEMD_UNIT"
+    log_info "Re-deploying systemd unit from template..."
+    if [[ -f "$SYSTEMD_TEMPLATE" ]]; then
+        cp "$SYSTEMD_TEMPLATE" "$SYSTEMD_UNIT"
+        sed -i "s|__OPENCLAW_BIN__|${OC_BIN}|g" "$SYSTEMD_UNIT"
+        sed -i "s|__OPENCLAW_USER__|${OPENCLAW_USER}|g" "$SYSTEMD_UNIT"
+        sed -i "s|__OPENCLAW_HOME__|${OPENCLAW_HOME}|g" "$SYSTEMD_UNIT"
+    else
+        cat > "$SYSTEMD_UNIT" << EOF
+[Unit]
+Description=OpenClaw Gateway — Self-hosted AI Assistant Platform
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=${OPENCLAW_USER}
+Group=${OPENCLAW_USER}
+WorkingDirectory=${OPENCLAW_HOME}
+EnvironmentFile=-${OPENCLAW_HOME}/.openclaw/.env
+Environment=NODE_OPTIONS=--max-old-space-size=1536
+ExecStart=${OC_BIN} gateway run
+Restart=always
+RestartSec=5
+WatchdogSec=30
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=${OPENCLAW_HOME}
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    fi
     if ! systemd-run --quiet --property=PrivateTmp=yes --wait /bin/true 2>/dev/null; then
         log_warn "Kernel does not support namespace sandboxing — disabling"
-        sed -i 's/^PrivateTmp=.*/#&/; s/^ProtectSystem=.*/#&/; s/^ProtectHome=.*/#&/; s/^NoNewPrivileges=.*/#&/' "$SYSTEMD_UNIT"
+        sed -i 's/^PrivateTmp=.*/#&/; s/^ProtectSystem=.*/#&/; s/^NoNewPrivileges=.*/#&/' "$SYSTEMD_UNIT"
     fi
     systemctl daemon-reload
     systemctl enable openclaw 2>/dev/null
@@ -300,11 +336,13 @@ else
     if [[ -f "$SYSTEMD_TEMPLATE" ]]; then
         cp "$SYSTEMD_TEMPLATE" "$SYSTEMD_UNIT"
         sed -i "s|__OPENCLAW_BIN__|${OC_BIN}|g" "$SYSTEMD_UNIT"
+        sed -i "s|__OPENCLAW_USER__|${OPENCLAW_USER}|g" "$SYSTEMD_UNIT"
+        sed -i "s|__OPENCLAW_HOME__|${OPENCLAW_HOME}|g" "$SYSTEMD_UNIT"
         log_info "Deployed systemd unit from template (ExecStart=${OC_BIN})."
     else
         cat > "$SYSTEMD_UNIT" << EOF
 [Unit]
-Description=OpenClaw Gateway
+Description=OpenClaw Gateway — Self-hosted AI Assistant Platform
 After=network.target docker.service
 Requires=docker.service
 
@@ -313,15 +351,23 @@ Type=simple
 User=${OPENCLAW_USER}
 Group=${OPENCLAW_USER}
 WorkingDirectory=${OPENCLAW_HOME}
+EnvironmentFile=-${OPENCLAW_HOME}/.openclaw/.env
+Environment=NODE_OPTIONS=--max-old-space-size=1536
 ExecStart=${OC_BIN} gateway run
 Restart=always
 RestartSec=5
+WatchdogSec=30
 
-# Security hardening
+# Hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=${OPENCLAW_HOME}/.openclaw ${OPENCLAW_HOME}
+ReadWritePaths=${OPENCLAW_HOME}
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw
 
 [Install]
 WantedBy=multi-user.target
@@ -336,7 +382,7 @@ EOF
     # Test if systemd namespace features work on this kernel
     if ! systemd-run --quiet --property=PrivateTmp=yes --wait /bin/true 2>/dev/null; then
         log_warn "Kernel does not support systemd namespace sandboxing — disabling"
-        sed -i 's/^PrivateTmp=.*/#&/; s/^ProtectSystem=.*/#&/; s/^ProtectHome=.*/#&/' "$SYSTEMD_UNIT"
+        sed -i 's/^PrivateTmp=.*/#&/; s/^ProtectSystem=.*/#&/; s/^NoNewPrivileges=.*/#&/' "$SYSTEMD_UNIT"
     fi
 fi
 

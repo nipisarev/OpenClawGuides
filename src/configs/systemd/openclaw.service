@@ -5,10 +5,10 @@ Requires=docker.service
 
 [Service]
 Type=simple
-User=openclaw
-Group=openclaw
-WorkingDirectory=/opt/openclaw
-EnvironmentFile=-/opt/openclaw/.env
+User=__OPENCLAW_USER__
+Group=__OPENCLAW_USER__
+WorkingDirectory=__OPENCLAW_HOME__
+EnvironmentFile=-__OPENCLAW_HOME__/.openclaw/.env
 Environment=NODE_OPTIONS=--max-old-space-size=1536
 ExecStart=__OPENCLAW_BIN__ gateway run
 Restart=always
@@ -19,8 +19,7 @@ WatchdogSec=30
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/opt/openclaw /home/openclaw/.openclaw
-ProtectHome=read-only
+ReadWritePaths=__OPENCLAW_HOME__
 
 # Logging
 StandardOutput=journal

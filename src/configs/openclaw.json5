@@ -90,7 +90,6 @@
   "channels": {
     "telegram": {
       "linkPreview": false,         // Prevent URL-based data exfiltration via link previews
-      "groupPolicy": "open",        // Default to open — restrict per-group via "groups" below
       "groups": {
         "*": {
           "requireMention": true,   // Bot responds in groups only when mentioned
