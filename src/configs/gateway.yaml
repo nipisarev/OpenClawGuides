@@ -54,7 +54,7 @@ agents:
         mode: all
         scope: dedicated
         workspaceAccess: rw
-        workspaceDir: /opt/openclaw/workspaces/coder
+        workspaceDir: __OPENCLAW_HOME__/workspaces/coder
       credentials:
         openaiApiKey: ${AGENT_2_OPENAI_KEY}
 

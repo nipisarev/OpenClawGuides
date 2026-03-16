@@ -37,7 +37,7 @@ echo ""
 # ── Step 1: Create workspace directories ─────────────────────────────────────
 step 1 $TOTAL_STEPS "Creating workspace directories"
 
-WORKSPACES_BASE="/opt/openclaw/workspaces"
+WORKSPACES_BASE="${OPENCLAW_HOME}/workspaces"
 
 # Create the coder workspace (other agents don't need workspace dirs)
 if [[ -d "${WORKSPACES_BASE}/coder" ]]; then
@@ -49,10 +49,7 @@ else
 fi
 
 # Ensure parent directory ownership
-chown -R "${OPENCLAW_USER}:${OPENCLAW_USER}" /opt/openclaw 2>/dev/null || {
-    mkdir -p /opt/openclaw
-    chown -R "${OPENCLAW_USER}:${OPENCLAW_USER}" /opt/openclaw
-}
+chown -R "${OPENCLAW_USER}:${OPENCLAW_USER}" "${OPENCLAW_HOME}" 2>/dev/null || true
 log_info "Workspace directories ready."
 
 # ── Step 2: Create .env file with agent API keys ────────────────────────────
@@ -217,6 +214,9 @@ channels:
       /coder: coder
       /research: researcher
 EOF
+
+    # Replace hardcoded workspace path with actual OPENCLAW_HOME
+    sed -i "s|/opt/openclaw/workspaces|${OPENCLAW_HOME}/workspaces|g" "$GATEWAY_YAML"
 
     chown "${OPENCLAW_USER}:${OPENCLAW_USER}" "$GATEWAY_YAML"
     log_success "gateway.yaml deployed with 3 agents (assistant, coder, researcher)."

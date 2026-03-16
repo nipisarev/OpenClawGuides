@@ -25,7 +25,7 @@ LOG_DIR="/var/log/openclaw"
 REPORT_FILE="${LOG_DIR}/audit-$(date +%Y-%m-%d).log"
 OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
 OPENCLAW_HOME="${OPENCLAW_HOME:-/home/${OPENCLAW_USER}}"
-OPENCLAW_DIR="${OPENCLAW_DIR:-/opt/openclaw}"
+OPENCLAW_DIR="${OPENCLAW_DIR:-${OPENCLAW_HOME}/.openclaw}"
 
 INIT_BASELINES=false
 SEND_TELEGRAM=false

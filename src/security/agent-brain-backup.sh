@@ -26,7 +26,7 @@ source "${SCRIPT_DIR}/../scripts/common.sh"
 # ── Configuration ────────────────────────────────────────────────────────────
 OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-/home/openclaw/openclaw/workspace}"
 OPENCLAW_CONFIG_DIR="${OPENCLAW_CONFIG_DIR:-/home/openclaw/.openclaw}"
-BACKUP_DIR="${BACKUP_DIR:-/opt/openclaw/backups/brain}"
+BACKUP_DIR="${BACKUP_DIR:-/home/openclaw/backups/brain}"
 ROLLBACK_COUNT=""
 
 # Files and directories to back up

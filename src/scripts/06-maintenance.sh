@@ -30,7 +30,7 @@ BASELINES_DIR="/var/lib/openclaw/baselines"
 AUDIT_LOG_DIR="/var/log/openclaw"
 AUDIT_SCRIPT="${SECURITY_DIR}/nightly-audit.sh"
 BACKUP_SCRIPT="${SECURITY_DIR}/agent-brain-backup.sh"
-BACKUP_DIR="/opt/openclaw/backups/brain"
+BACKUP_DIR="${OPENCLAW_HOME}/backups/brain"
 
 check_root
 check_ubuntu
@@ -71,8 +71,8 @@ if [[ ! -f "$AUDIT_SCRIPT" ]]; then
             cp "${REPO_SCRIPTS_DIR}/common.sh" "$COMMON_TARGET"
         fi
 
-        mkdir -p /opt/openclaw/scripts
-        cp "$SCRIPT_DIR/common.sh" /opt/openclaw/scripts/ 2>/dev/null || true
+        mkdir -p "${OPENCLAW_HOME}/scripts"
+        cp "$SCRIPT_DIR/common.sh" "${OPENCLAW_HOME}/scripts/" 2>/dev/null || true
         log_success "Deployed nightly audit script from ${AUDIT_TEMPLATE}"
     else
         log_error "Audit template not found at ${AUDIT_TEMPLATE}"
