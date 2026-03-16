@@ -133,64 +133,88 @@ echo -e "    - AI provider API key (Anthropic or OpenAI)"
 echo -e "    - Telegram bot token (from @BotFather)"
 echo ""
 
-# ── Collect information ──────────────────────────────────────────────────────
+# ── Detect existing installation ─────────────────────────────────────────────
 
-read -rp "$(echo -e "${YELLOW}?${NC} Press Enter to start, or Ctrl+C to cancel... ")" < /dev/tty
-echo ""
+ALREADY_INSTALLED=false
+if id openclaw &>/dev/null && command -v openclaw &>/dev/null 2>&1; then
+    OPENCLAW_HOME=$(eval echo "~openclaw")
+    if [[ -f "${OPENCLAW_HOME}/.openclaw/openclaw.json5" ]]; then
+        ALREADY_INSTALLED=true
+    fi
+fi
 
-# Tailscale auth key
-echo -e "${BOLD}Tailscale VPN${NC}"
-echo -e "  Create an auth key at: ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
-echo -e "  (Click 'Generate auth key', copy the tskey-auth-... value)"
-echo ""
-read -rp "$(echo -e "${BLUE}?${NC} Tailscale auth key (tskey-auth-...): ")" TAILSCALE_AUTH_KEY < /dev/tty
-echo ""
+if [[ "$ALREADY_INSTALLED" == true ]]; then
+    echo -e "  ${GREEN}Existing installation detected.${NC} Running in update/repair mode."
+    echo -e "  Skipping credential collection — using existing configuration."
+    echo ""
 
-# AI Provider
-echo -e "${BOLD}AI Provider${NC}"
-echo -e "  1) Anthropic (Claude) — recommended"
-echo -e "  2) OpenAI (GPT-4o)"
-echo ""
-read -rp "$(echo -e "${BLUE}?${NC} Choose provider [1]: ")" AI_CHOICE < /dev/tty
-AI_CHOICE="${AI_CHOICE:-1}"
+    # Set empty credentials — phase scripts will skip prompts when services are already configured
+    TAILSCALE_AUTH_KEY=""
+    AI_PROVIDER=""
+    AI_MODEL=""
+    KEY_NAME=""
+    API_KEY=""
+    TELEGRAM_TOKEN=""
+else
+    # ── Collect information (first install only) ─────────────────────────────
 
-case "$AI_CHOICE" in
-    1)
-        AI_PROVIDER="anthropic"
-        AI_MODEL="anthropic/claude-sonnet-4-20250514"
-        KEY_NAME="anthropicApiKey"
-        echo -e "  Get your key at: ${BLUE}https://console.anthropic.com${NC} > API Keys"
-        ;;
-    2)
-        AI_PROVIDER="openai"
-        AI_MODEL="openai/gpt-4o"
-        KEY_NAME="openaiApiKey"
-        echo -e "  Get your key at: ${BLUE}https://platform.openai.com${NC} > API keys"
-        ;;
-    *)
-        log_error "Invalid choice. Run the installer again."
+    read -rp "$(echo -e "${YELLOW}?${NC} Press Enter to start, or Ctrl+C to cancel... ")" < /dev/tty
+    echo ""
+
+    # Tailscale auth key
+    echo -e "${BOLD}Tailscale VPN${NC}"
+    echo -e "  Create an auth key at: ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
+    echo -e "  (Click 'Generate auth key', copy the tskey-auth-... value)"
+    echo ""
+    read -rp "$(echo -e "${BLUE}?${NC} Tailscale auth key (tskey-auth-...): ")" TAILSCALE_AUTH_KEY < /dev/tty
+    echo ""
+
+    # AI Provider
+    echo -e "${BOLD}AI Provider${NC}"
+    echo -e "  1) Anthropic (Claude) — recommended"
+    echo -e "  2) OpenAI (GPT-4o)"
+    echo ""
+    read -rp "$(echo -e "${BLUE}?${NC} Choose provider [1]: ")" AI_CHOICE < /dev/tty
+    AI_CHOICE="${AI_CHOICE:-1}"
+
+    case "$AI_CHOICE" in
+        1)
+            AI_PROVIDER="anthropic"
+            AI_MODEL="anthropic/claude-sonnet-4-20250514"
+            KEY_NAME="anthropicApiKey"
+            echo -e "  Get your key at: ${BLUE}https://console.anthropic.com${NC} > API Keys"
+            ;;
+        2)
+            AI_PROVIDER="openai"
+            AI_MODEL="openai/gpt-4o"
+            KEY_NAME="openaiApiKey"
+            echo -e "  Get your key at: ${BLUE}https://platform.openai.com${NC} > API keys"
+            ;;
+        *)
+            log_error "Invalid choice. Run the installer again."
+            exit 1
+            ;;
+    esac
+
+    echo ""
+    read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY < /dev/tty
+    if [[ -z "$API_KEY" ]]; then
+        log_error "API key cannot be empty."
         exit 1
-        ;;
-esac
+    fi
+    echo ""
 
-echo ""
-read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY < /dev/tty
-if [[ -z "$API_KEY" ]]; then
-    log_error "API key cannot be empty."
-    exit 1
+    # Telegram bot token
+    echo -e "${BOLD}Telegram Bot${NC}"
+    echo -e "  Create a bot: open Telegram > search @BotFather > send /newbot"
+    echo ""
+    read -rp "$(echo -e "${BLUE}?${NC} Telegram bot token (123456789:AAF...): ")" TELEGRAM_TOKEN < /dev/tty
+    if [[ -z "$TELEGRAM_TOKEN" ]]; then
+        log_error "Telegram bot token cannot be empty."
+        exit 1
+    fi
+    echo ""
 fi
-echo ""
-
-# Telegram bot token
-echo -e "${BOLD}Telegram Bot${NC}"
-echo -e "  Create a bot: open Telegram > search @BotFather > send /newbot"
-echo ""
-read -rp "$(echo -e "${BLUE}?${NC} Telegram bot token (123456789:AAF...): ")" TELEGRAM_TOKEN < /dev/tty
-if [[ -z "$TELEGRAM_TOKEN" ]]; then
-    log_error "Telegram bot token cannot be empty."
-    exit 1
-fi
-echo ""
 
 # Export for child scripts
 export TAILSCALE_AUTH_KEY
@@ -284,20 +308,23 @@ OPENCLAW_HOME=$(eval echo "~openclaw")
 OPENCLAW_PNPM_HOME=$(eval echo "~openclaw/.local/share/pnpm")
 export PATH="$OPENCLAW_PNPM_HOME:$PATH"
 
-# Configure agent directly since Phase 4 normally prompts interactively
-log_info "Configuring first agent..."
+# Skip Phase 4 config on re-runs — credentials already configured
+if [[ "$ALREADY_INSTALLED" == true ]]; then
+    log_info "Agent already configured — skipping Phase 4 credential setup."
+else
+    log_info "Configuring first agent..."
 
-sudo -u openclaw bash -c "
-    export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
-    export PATH=\"\$PNPM_HOME:\$PATH\"
+    sudo -u openclaw bash -c "
+        export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+        export PATH=\"\$PNPM_HOME:\$PATH\"
 
-    # Set AI model
-    openclaw config set agents.defaults.model '${AI_MODEL}' 2>/dev/null || true
+        # Set AI model
+        openclaw config set agents.defaults.model '${AI_MODEL}' 2>/dev/null || true
 
-    # Set API key
-    openclaw config set 'agents.defaults.credentials.${KEY_NAME}' '${API_KEY}' 2>/dev/null || true
+        # Set API key
+        openclaw config set 'agents.defaults.credentials.${KEY_NAME}' '${API_KEY}' 2>/dev/null || true
 
-    # Set security defaults
+        # Set security defaults
     openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
     openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
     openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
@@ -308,10 +335,11 @@ sudo -u openclaw bash -c "
     # Disable link previews
     openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
 " 2>/dev/null || log_warn "Some agent configuration steps may need manual attention."
+fi
 
-# Start the Gateway
+# Start/restart the Gateway
 log_info "Starting OpenClaw Gateway..."
-systemctl start openclaw 2>/dev/null || {
+systemctl restart openclaw 2>/dev/null || systemctl start openclaw 2>/dev/null || {
     sudo -u openclaw bash -c '
         export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
         export PATH="$PNPM_HOME:$PATH"
