@@ -56,7 +56,7 @@ if [[ -n "$AI_PROVIDER" && -n "$API_KEY" ]]; then
 
     # Derive defaults if not explicitly set
     if [[ "$AI_PROVIDER" == "anthropic" ]]; then
-        AI_MODEL="${AI_MODEL:-anthropic/claude-sonnet-4-20250514}"
+        AI_MODEL="${AI_MODEL:-anthropic/claude-sonnet-4-6}"
         KEY_NAME="${KEY_NAME:-anthropicApiKey}"
     elif [[ "$AI_PROVIDER" == "openai" ]]; then
         AI_MODEL="${AI_MODEL:-openai/gpt-4o}"
@@ -76,7 +76,7 @@ else
     case "$PROVIDER_CHOICE" in
         1)
             AI_PROVIDER="anthropic"
-            AI_MODEL="anthropic/claude-sonnet-4-20250514"
+            AI_MODEL="anthropic/claude-sonnet-4-6"
             KEY_NAME="anthropicApiKey"
             echo ""
             echo -e "  ${BLUE}Get your API key at:${NC} ${BOLD}https://console.anthropic.com${NC}"

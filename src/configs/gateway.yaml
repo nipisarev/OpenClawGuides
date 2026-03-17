@@ -26,7 +26,7 @@ agents:
     agent-1:
       model:
         provider: anthropic
-        name: claude-sonnet-4-20250514
+        name: claude-sonnet-4-6
       tools:
         profile: minimal
       sandbox:
@@ -62,7 +62,7 @@ agents:
     agent-3:
       model:
         provider: anthropic
-        name: claude-sonnet-4-20250514
+        name: claude-sonnet-4-6
       tools:
         profile: minimal
         allow:

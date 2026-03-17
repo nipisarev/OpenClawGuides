@@ -198,7 +198,7 @@ else
     case "$AI_CHOICE" in
         1)
             AI_PROVIDER="anthropic"
-            AI_MODEL="anthropic/claude-sonnet-4-20250514"
+            AI_MODEL="anthropic/claude-sonnet-4-6"
             KEY_NAME="anthropicApiKey"
             echo -e "  Get your key at: ${BLUE}https://console.anthropic.com${NC} > API Keys"
             ;;
@@ -389,7 +389,7 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
         case "$AI_CHOICE" in
             1)
                 AI_PROVIDER="anthropic"
-                AI_MODEL="anthropic/claude-sonnet-4-20250514"
+                AI_MODEL="anthropic/claude-sonnet-4-6"
                 KEY_NAME="anthropicApiKey"
                 ;;
             2)
