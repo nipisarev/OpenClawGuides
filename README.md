@@ -56,11 +56,6 @@ Five layers of defense are applied during installation:
 - UFW rule verification after enable -- auto-disables firewall if SSH rule is lost
 - Guides include mandatory stop points for manual verification
 
-## Guides
-
-- [English setup guide](docs/guides/openclaw-setup-guide-en.md)
-- [Russian setup guide](docs/guides/openclaw-setup-guide-ru.md)
-
 ## Security: Vulnerabilities & Mitigations
 
 ### Network attacks

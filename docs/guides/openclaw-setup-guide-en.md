@@ -8,9 +8,12 @@ A step-by-step guide for self-hosting an AI assistant on your own server.
 
 - [Phase 0: What is OpenClaw](#phase-0-what-is-openclaw)
 - [Phase 1: Getting a Server](#phase-1-getting-a-server)
-- [Phase 2: Securing the Server](#phase-2-securing-the-server)
-- [Phase 3: Installing OpenClaw](#phase-3-installing-openclaw)
-- [Phase 4: First Agent — Quick Start](#phase-4-first-agent--quick-start)
+  - [Primary Path: Automated Installer](#primary-path-automated-installer)
+  - [Fallback: Manual Steps](#fallback-manual-steps)
+- [Phase 2: Securing the Server](#phase-2-securing-the-server) *(automated by installer)*
+- [Phase 3: Installing OpenClaw](#phase-3-installing-openclaw) *(automated by installer)*
+  - [Manual Installation](#manual-installation)
+- [Phase 4: First Agent — Quick Start](#phase-4-first-agent--quick-start) *(automated by installer)*
 - [Phase 5: Agent Team](#phase-5-agent-team)
 - [Phase 6: Maintenance and Monitoring](#phase-6-maintenance-and-monitoring)
 
@@ -61,7 +64,7 @@ Why is this needed if you can just open ChatGPT in a browser? Three reasons:
 | VPS server (a virtual server running in a data center 24/7 — like a computer, but in the cloud) | A place where OpenClaw will live | Hetzner, DigitalOcean, Aeza — see Phase 1 |
 | Telegram account | The messenger through which you will communicate with the assistant | telegram.org |
 | AI provider API key (a secret code for accessing the AI model — like a service password) | So your server can send requests to Claude or GPT | console.anthropic.com or platform.openai.com |
-| Approximately 30-40 minutes | For the entire installation from start to a working assistant | — |
+| Approximately 15-25 min with installer, 30-40 min manually | For the entire installation from start to a working assistant | — |
 
 ### Security Principle
 
@@ -121,7 +124,6 @@ If you need access for multiple users — deploy separate Gateways for each.
 ### Links
 
 - OpenClaw repository: https://github.com/openclaw/openclaw
-- Ansible installer: https://github.com/openclaw/openclaw-ansible
 - Threat model and security: https://github.com/centminmod/explain-openclaw
 - Community guides: https://github.com/xianyu110/awesome-openclaw-tutorial
 
@@ -144,6 +146,43 @@ We need a VPS (Virtual Private Server — a virtual server in a data center that
 If you already have a VPS with Ubuntu 22.04 or Debian 12 and you can connect to it via SSH — skip directly to Phase 2.
 
 If not — follow the steps below.
+
+### Primary Path: Automated Installer
+
+If you have a VPS with root SSH access, you can use the automated installer to handle Phases 1-4 in one step.
+
+**Prerequisites:**
+- VPS with root SSH access (Ubuntu 22.04 or Debian 12)
+- Tailscale auth key (get one at https://login.tailscale.com/admin/settings/keys)
+- Anthropic API key (from https://console.anthropic.com)
+- Telegram bot token (from @BotFather)
+
+**Steps:**
+
+1. SSH into your server as root:
+
+```bash
+ssh root@your_ip_address
+```
+
+2. Run the installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/openclaw/openclaw/main/install.sh | bash
+```
+
+The installer will prompt you for the prerequisites listed above and automatically handle:
+- Server hardening (Phase 2)
+- OpenClaw installation and configuration (Phase 3)
+- First agent setup (Phase 4)
+
+After the installer completes, skip to [Phase 5: Agent Team](#phase-5-agent-team).
+
+---
+
+### Fallback: Manual Steps
+
+If you prefer to understand every step or the installer does not suit your needs, follow the manual steps below.
 
 ### Diagram
 
@@ -436,6 +475,8 @@ exit
 ---
 
 ## Phase 2: Securing the Server
+
+> **Automated:** The installer handles this phase automatically. If you used the installer, skip to Phase 5.
 
 ### What We Are Doing and Why
 
@@ -973,154 +1014,37 @@ sudo systemctl restart sshd
 
 ## Phase 3: Installing OpenClaw
 
+> **Automated:** The installer handles this phase automatically. If you used the installer, skip to Phase 5.
+
 ### What We Are Doing and Why
 
 The server is secured — now we install the application itself. OpenClaw is a gateway platform that connects messengers (Telegram, WhatsApp) with AI models (Claude, GPT). Your messages are processed on your server; only requests to the AI go outward.
 
-There are two installation paths:
-1. **Via Ansible** (recommended) — automatic installation with a single command
-2. **Manual** — for those who want to understand every step
-
-Both paths lead to the same result.
-
 ### Diagram
 
 ```
-Your computer                          VPS
-┌──────────────────┐                   ┌──────────────────────────────┐
-│                  │   SSH/Tailscale   │                              │
-│  Ansible playbook├──────────────────►│  Node.js 22.x               │
-│  (auto-installer)│   installs       │  pnpm (package manager)      │
-│                  │                   │  Docker CE (containers)      │
-└──────────────────┘                   │  OpenClaw Gateway            │
-                                       │  systemd service             │
-                                       └──────────────────────────────┘
+VPS
+┌──────────────────────────────┐
+│                              │
+│  Node.js 22.x               │
+│  pnpm (package manager)      │
+│  Docker CE (containers)      │
+│  OpenClaw Gateway            │
+│  systemd service             │
+└──────────────────────────────┘
 
-Or all the same — manually, command by command.
+All steps below are executed on the VPS, command by command.
 ```
 
 ### Steps
 
 ---
 
-### Path A: Automatic Installation via Ansible (recommended)
-
-Ansible — is an automatic installer. Imagine a robot chef to whom you give a recipe (playbook), and it cooks the dish step by step, skipping nothing. Ansible runs on **your computer** and connects to the server via SSH on its own to set everything up.
-
-#### A1. Install Ansible on your computer (not on the VPS!)
-
-**macOS:**
-
-```bash
-brew install ansible
-```
-
-`brew` is a package manager for macOS (if not installed, see https://brew.sh).
-
-**Ubuntu/Debian (if your local computer runs Linux):**
-
-```bash
-sudo apt update && sudo apt install -y ansible
-```
-
-Verify the installation:
-
-```bash
-ansible --version
-```
-
-Expected output — a line starting with:
-```
-ansible [core 2.x.x]
-```
-
-#### A2. Download the Ansible playbook for OpenClaw
-
-```bash
-git clone https://github.com/openclaw/openclaw-ansible.git
-cd openclaw-ansible
-```
-
-#### A3. Configure the inventory file
-
-The inventory is a file where Ansible finds information about your server: its address, connection method, and configuration variables.
-
-```bash
-cp inventory.example inventory
-nano inventory
-```
-
-Fill in the following fields:
-
-```ini
-[openclaw]
-your_server ansible_host=100.x.y.z ansible_user=your_user ansible_ssh_private_key_file=~/.ssh/id_ed25519
-
-[openclaw:vars]
-tailscale_auth_key=tskey-auth-xxxxx
-```
-
-Where:
-- `100.x.y.z` — the Tailscale IP of your server (from Phase 2, step 3.4)
-- `your_user` — your username on the server
-- `~/.ssh/id_ed25519` — the path to your SSH key (from Phase 1)
-- `tskey-auth-xxxxx` — Tailscale auth key (get it at https://login.tailscale.com/admin/settings/keys, click "Generate auth key")
-
-Save: `Ctrl+O`, `Enter`, `Ctrl+X`.
-
-#### A4. Run the playbook
-
-```bash
-ansible-playbook -i inventory site.yml
-```
-
-This command will connect to your server and automatically install:
-- **Node.js 22.x** — the JavaScript runtime that OpenClaw is built on
-- **pnpm** — a package manager (a program for installing other packages from the npm registry, like apt for the JavaScript world)
-- **Docker CE** — a containerization platform (more on containers below)
-- **systemd service** — the operating system's service manager that keeps OpenClaw running, even if the server reboots
-
-The process will take 5-10 minutes. You will see tasks executed one by one:
-
-```
-PLAY [openclaw] ****
-TASK [Gathering Facts] **** ok
-TASK [Install Node.js 22.x] **** changed
-TASK [Install pnpm] **** changed
-TASK [Install Docker CE] **** changed
-...
-PLAY RECAP ****
-your_server : ok=15   changed=12   unreachable=0   failed=0
-```
-
-If the `PLAY RECAP` line shows `failed=0` — everything was installed successfully.
-
-**After the playbook completes, connect to the server** and run the onboarding:
-
-```bash
-ssh your_user@100.x.y.z
-openclaw onboard --install-daemon
-```
-
-The `onboard` command launches an interactive initial setup wizard. The `--install-daemon` flag additionally registers OpenClaw as a systemd service (daemon — a background process that runs continuously, not tied to your terminal session).
-
-Verify the service is properly enabled:
-```bash
-systemctl is-enabled openclaw
-```
-Expected output: `enabled`
-
-Proceed to step 6 (common for both paths).
-
----
-
-### Path B: Manual Installation
-
-If you want to understand every step or Ansible does not suit you for some reason.
+### Manual Installation
 
 All commands below are executed **on the VPS** (connect via SSH).
 
-#### B1. Install Node.js 22.x
+#### Step 1. Install Node.js 22.x
 
 Node.js is a JavaScript runtime environment. OpenClaw is written in JavaScript/TypeScript, and Node.js is required for it to run.
 
@@ -1144,7 +1068,7 @@ v22.x.x
 
 The number after `v22.` may differ — what matters is that it starts with `22`.
 
-#### B2. Install pnpm
+#### Step 2. Install pnpm
 
 pnpm is a package manager for Node.js, analogous to apt but for JavaScript libraries. OpenClaw is distributed through the npm registry, and pnpm is needed for its installation.
 
@@ -1166,7 +1090,7 @@ Expected output — a version number:
 9.x.x
 ```
 
-#### B3. Install Docker CE
+#### Step 3. Install Docker CE
 
 Docker is a containerization platform. A container is like a shipping container on a ship: the program inside is isolated from everything else on the server. If an AI agent runs something dangerous, it happens inside the container and does not affect your server.
 
@@ -1218,7 +1142,7 @@ Hello from Docker!
 This message shows that your installation appears to be working correctly.
 ```
 
-#### B4. Install OpenClaw
+#### Step 4. Install OpenClaw
 
 ```bash
 pnpm install -g openclaw
@@ -1239,13 +1163,13 @@ openclaw v2026.x.x
 
 > **Critically important:** The OpenClaw version must be **no lower than v2026.3.12**. Earlier versions contain serious vulnerabilities: CVE-2026-25253 (WebSocket connection hijacking enabling remote code execution even when bound to loopback) and CVE-2026-28472 (authentication bypass). If your version is lower — update with `openclaw update`.
 
-#### B5. Run the initial setup
+#### Step 5. Register OpenClaw as a systemd service
+
+Create a systemd service so that OpenClaw starts automatically on boot and restarts on failures:
 
 ```bash
-openclaw onboard --install-daemon
+openclaw service install
 ```
-
-The wizard will ask several questions. The `--install-daemon` flag will register OpenClaw as a systemd service — the operating system's service manager that automatically starts OpenClaw on server boot and restarts it on failures.
 
 Verify the service is properly enabled:
 ```bash
@@ -1287,6 +1211,12 @@ Replace the contents with the following:
     }
   },
 
+  "env": {},
+
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+
   "agents": {
     "defaults": {
       "tools": {
@@ -1297,6 +1227,11 @@ Replace the contents with the following:
         "workspaceAccess": "none"
       }
     }
+  },
+
+  "skills": {
+    "autoInstall": false,
+    "trustedPublishers": []
   },
 
   "logging": {
@@ -1319,6 +1254,21 @@ Replace the contents with the following:
 
   "commands": {
     "config": false
+  },
+
+  "channels": {
+    "telegram": {
+      "linkPreview": false,
+      "groups": {
+        "*": {
+          "requireMention": true,
+          "tools": {
+            "allow": ["read", "message"],
+            "deny": ["exec", "write", "edit", "browser", "gateway", "nodes"]
+          }
+        }
+      }
+    }
   }
 }
 ```
@@ -1337,6 +1287,10 @@ What each setting does:
 | `discovery.mdns.mode: "off"` | The server does not announce itself on the network | A VPS does not need local network discovery |
 | `plugins.enabled: false` | Plugins are disabled | No third-party code will run until you explicitly allow it |
 | `commands.config: false` | Configuration changes via chat are prohibited | Settings are changed only through the terminal on the server |
+| `session.dmScope: "per-channel-peer"` | Separate session per channel and peer | Prevents context leakage between users and channels |
+| `skills.autoInstall: false` | Skills are not auto-installed | Prevents supply-chain attacks via malicious skills |
+| `channels.telegram.linkPreview: false` | Link previews disabled | Blocks data exfiltration via crafted URLs |
+| `channels.telegram.groups.*.requireMention: true` | Bot only responds when mentioned in groups | Prevents unintended tool usage by group members |
 
 Do not close the file — first generate the token (step 7), insert it, and only then save.
 
@@ -1603,13 +1557,14 @@ The command will fix what can be fixed automatically and show the remaining issu
 
 - OpenClaw — official website and documentation: https://openclaw.ai
 - Docker — installation guide for Ubuntu: https://docs.docker.com/engine/install/ubuntu/
-- Ansible — getting started guide: https://docs.ansible.com/ansible/latest/getting_started/
 - Node.js — official website: https://nodejs.org
 - pnpm — documentation: https://pnpm.io
 
 ---
 
 ## Phase 4: First Agent — Quick Start
+
+> **Automated:** The installer handles this phase automatically. If you used the installer, skip to Phase 5.
 
 ### What We Are Doing and Why
 
@@ -1685,12 +1640,10 @@ The bot token is your bot's address and password in one string. Whoever holds th
 Connect to the server via SSH (as done in previous phases) and run:
 
 ```bash
-openclaw channels add telegram
+openclaw channels add --channel telegram --token 'YOUR_TELEGRAM_BOT_TOKEN'
 ```
 
-Expected result: OpenClaw will launch an interactive setup wizard. It will ask you to enter the bot token.
-
-Paste the token received from BotFather and press Enter.
+Replace `YOUR_TELEGRAM_BOT_TOKEN` with the actual token received from BotFather (the string like `7123456789:AAF...`).
 
 Next, configure the allowlist (a list of those permitted to communicate with the bot). This is important: without an allowlist, any Telegram user can message your bot and spend your API budget.
 
@@ -1723,13 +1676,13 @@ Why this is needed: a malicious web page can force the agent to generate a URL c
 Specify which AI model to use. For Claude Sonnet (recommended as a balance of quality and cost):
 
 ```bash
-openclaw config set agents.defaults.model anthropic/claude-sonnet-4-20250514
+openclaw config set agents.defaults.model anthropic/claude-sonnet-4-6
 ```
 
-Save the API key. OpenClaw stores keys in its secure storage, not in plaintext in the configuration:
+Save the API key in the environment configuration:
 
 ```bash
-openclaw config set agents.defaults.credentials.anthropicApiKey "your-api-key"
+openclaw config set env.ANTHROPIC_API_KEY "your-api-key"
 ```
 
 Replace `your-api-key` with the actual key obtained in Step 1. Quotes are required.
@@ -1738,7 +1691,7 @@ If you chose OpenAI, use this instead:
 
 ```bash
 openclaw config set agents.defaults.model openai/gpt-4o
-openclaw config set agents.defaults.credentials.openaiApiKey "your-api-key"
+openclaw config set env.OPENAI_API_KEY "your-api-key"
 ```
 
 Enable full isolation — all agent tools will run inside a Docker container, with no access to the main system:
@@ -1827,7 +1780,7 @@ The API account balance is exhausted. Top up the balance in the provider's dashb
 
 **"Bot responds, but not to me"**
 
-The allowlist is configured incorrectly, and someone else found your bot. Review the allowlist: `openclaw channels add telegram` (reconfigure).
+The allowlist is configured incorrectly, and someone else found your bot. Review the allowlist: `openclaw channels add --channel telegram --token 'YOUR_TOKEN'` (reconfigure).
 
 ### Links
 
@@ -2004,7 +1957,7 @@ agents:
     assistant:
       model:
         provider: anthropic
-        name: claude-sonnet-4-20250514
+        name: claude-sonnet-4-6
       tools:
         profile: minimal
       sandbox:
@@ -2039,7 +1992,7 @@ agents:
     researcher:
       model:
         provider: anthropic
-        name: claude-sonnet-4-20250514
+        name: claude-sonnet-4-6
       tools:
         profile: minimal
         allow: [browser]
@@ -2259,6 +2212,8 @@ All checks should pass without errors (PASS). If there are warnings (WARN) or er
 In the previous phases, we installed and configured OpenClaw on the VPS. But a server is not a household appliance that you can "set and forget." Without regular maintenance, security settings can "drift" (someone accidentally changes the config via chat), updates will not be installed, and API costs can spiral out of control.
 
 In this phase, we will set up a simple maintenance routine: 5 minutes per week and 15 minutes per month — this is enough to keep the system secure and stable.
+
+> **Tip:** If you used the automated installer, the optional `06-maintenance.sh` script can automate parts of this maintenance routine. Run `bash /opt/openclaw/scripts/06-maintenance.sh` to set up automated weekly checks and backups.
 
 ### Diagram
 
@@ -2755,7 +2710,7 @@ If a reboot is needed (usually after a kernel update), proceed to the next step.
 
 **Step 5.3. Safe server reboot**
 
-Before rebooting, make sure OpenClaw is installed as a system service (daemon — a background process that automatically starts on system boot). We did this in Phase 3 with the `openclaw onboard --install-daemon` command. In this case, after reboot, OpenClaw will start on its own.
+Before rebooting, make sure OpenClaw is installed as a system service (daemon — a background process that automatically starts on system boot). We did this in Phase 3 with the `openclaw service install` command. In this case, after reboot, OpenClaw will start on its own.
 
 Verify that the service is set to auto-start:
 
@@ -3114,6 +3069,5 @@ If your security requirements grow — for example, for working with financial d
 
 - Official documentation: https://docs.openclaw.ai
 - Source code on GitHub: https://github.com/openclaw/openclaw
-- Ansible installer: https://github.com/openclaw/openclaw-ansible
 - Discussions and questions: https://github.com/openclaw/openclaw/discussions
 - Community guides collection: https://github.com/xianyu110/awesome-openclaw-tutorial
