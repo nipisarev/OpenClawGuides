@@ -32,6 +32,9 @@ curl -fsSL https://raw.githubusercontent.com/nipisarev/OpenClawGuides/main/src/i
 - Nightly security audit (13 metrics)
 - Automated brain backup with git
 - systemd service with resource limits
+- Credential persistence across re-runs
+- Default model: claude-sonnet-4-6
+- Correct OpenClaw CLI integration (channels add --channel, config env section)
 
 ## Security
 
@@ -58,21 +61,58 @@ Five layers of defense are applied during installation:
 - [English setup guide](docs/guides/openclaw-setup-guide-en.md)
 - [Russian setup guide](docs/guides/openclaw-setup-guide-ru.md)
 
-## Project Structure
+## Security: Vulnerabilities & Mitigations
 
-```
-.
-├── src/
-│   ├── install.sh              # Main installer
-│   ├── configs/                # Config templates (UFW, sshd, systemd, etc.)
-│   ├── scripts/                # Hardening, audit, and backup scripts
-│   └── tests/                  # Validation and smoke tests
-├── docs/
-│   └── guides/                 # Step-by-step setup guides
-├── Makefile                    # Dev targets: install, test, lint, validate
-├── LICENSE
-└── README.md
-```
+### Network attacks
+
+| Vulnerability | Mitigation |
+|---|---|
+| Open ports / service exposure | UFW default-deny incoming; only SSH (22/tcp) + Tailscale (41641/udp) allowed |
+| Gateway accessible from internet | Binds to 127.0.0.1 only (loopback); Tailscale mesh for remote access |
+| Man-in-the-middle | Tailscale WireGuard encryption for all remote traffic |
+| DNS/network sniffing | mDNS gateway discovery disabled |
+
+### Access control
+
+| Vulnerability | Mitigation |
+|---|---|
+| SSH brute force | Fail2ban: 5 attempts → 1h ban; key-only auth; root login disabled |
+| Password-based SSH | PasswordAuthentication + ChallengeResponseAuthentication disabled |
+| Unauthorized gateway access | 32-byte random auth token (`openssl rand -hex 32`) |
+| SSH config tampering | `chattr +i` on sshd_config + root authorized_keys (immutable) |
+
+### Application / AI agent risks
+
+| Vulnerability | Mitigation |
+|---|---|
+| Agent filesystem escape | `sandbox.mode=all` → Docker isolation; `workspaceAccess=none` |
+| Agent resource exhaustion | Memory 512M + CPU 0.5 per agent; systemd `MemoryMax=2G` |
+| Cross-user session leakage | `session.dmScope=per-channel-peer` (isolated sessions) |
+| Malicious plugins/skills | `autoInstall=false`; `trustedPublishers` empty; skills auto-install off |
+| Chat-based config manipulation | `/config` command disabled in chat |
+| Prompt injection via group chats | `groupPolicy=allowlist`; group tools restricted to read+message only |
+| Link preview data exfiltration | Telegram `linkPreview` disabled |
+| Log credential leakage | Logging redaction `mode="tools"` strips sensitive data |
+| Browser sandbox escape | `evaluateEnabled=false` |
+| Credential loss on config reshuffle | Backup file (`.credentials.env`, 600 perms) survives `doctor --fix` |
+
+### System integrity
+
+| Vulnerability | Mitigation |
+|---|---|
+| Unpatched OS vulnerabilities | `unattended-upgrades` enabled |
+| Privilege escalation via systemd | `NoNewPrivileges=true`; `ProtectSystem=strict`; `PrivateTmp` |
+| Unauthorized SUID, ports, crons | Nightly 13-metric audit with baseline drift detection |
+
+---
+
+### Sandbox Network Access
+
+> **Note on sandbox networking:** By default, sandbox containers run with `network: none` (no internet access). If your agents need to fetch external data (e.g., morning briefing cron fetching weather/news), you must enable networking:
+> ```bash
+> openclaw config set agents.defaults.sandbox.docker.network bridge
+> ```
+> **Security impact:** This allows sandboxed agents to make outbound HTTP/HTTPS requests. While agents remain Docker-isolated (no filesystem/host access), they CAN reach external services. For maximum lockdown, keep `network: none` and only enable `bridge` if your use case requires it.
 
 ## Contributing
 
