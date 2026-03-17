@@ -342,8 +342,11 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
                 export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
                 export PATH=\"\$PNPM_HOME:\$PATH\"
 
-                # Restore AI model
-                [[ -n '${CRED_AI_MODEL:-}' ]] && openclaw config set agents.defaults.model '${CRED_AI_MODEL:-}' 2>/dev/null || true
+                # Set AI model to latest recommended version (ignore stale backup value)
+                case '${CRED_AI_PROVIDER:-anthropic}' in
+                    anthropic) openclaw config set agents.defaults.model 'anthropic/claude-sonnet-4-6' 2>/dev/null || true ;;
+                    openai)    openclaw config set agents.defaults.model 'openai/gpt-4o' 2>/dev/null || true ;;
+                esac
 
                 # Restore API key via onboard (config set doesn't work for credentials)
                 [[ -n '${CRED_API_KEY:-}' ]] && {
