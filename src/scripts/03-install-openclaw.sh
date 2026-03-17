@@ -161,8 +161,13 @@ if [[ -f "$OPENCLAW_CONFIG" ]]; then
         export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
         export PATH=\"\$PNPM_HOME:\$PATH\"
         openclaw config set gateway.mode local 2>/dev/null || true
-        openclaw config delete channels.telegram.groupPolicy 2>/dev/null || true
     "
+    # Remove insecure groupPolicy from config files (sed fallback — CLI may not support delete)
+    for cfg in "${OPENCLAW_DIR}/openclaw.json5" "${OPENCLAW_DIR}/openclaw.json"; do
+        if [[ -f "$cfg" ]]; then
+            sed -i '/"groupPolicy"/d' "$cfg"
+        fi
+    done
     log_info "Verified critical gateway settings."
 else
     # Check for template in the repo
@@ -399,22 +404,18 @@ fi
 # Apply resource limits via drop-in override
 mkdir -p "$SYSTEMD_OVERRIDE_DIR"
 
-if [[ -f "${SYSTEMD_OVERRIDE_DIR}/resources.conf" ]]; then
-    log_warn "Resource limits override already exists — skipping."
+RESOURCES_TEMPLATE="${SCRIPT_DIR}/../configs/systemd/openclaw-resources.conf"
+if [[ -f "$RESOURCES_TEMPLATE" ]]; then
+    cp "$RESOURCES_TEMPLATE" "${SYSTEMD_OVERRIDE_DIR}/resources.conf"
+    log_info "Resource limits deployed from template."
 else
-    RESOURCES_TEMPLATE="${SCRIPT_DIR}/../configs/systemd/openclaw-resources.conf"
-    if [[ -f "$RESOURCES_TEMPLATE" ]]; then
-        cp "$RESOURCES_TEMPLATE" "${SYSTEMD_OVERRIDE_DIR}/resources.conf"
-        log_info "Resource limits deployed from template."
-    else
-        cat > "${SYSTEMD_OVERRIDE_DIR}/resources.conf" << 'EOF'
+    cat > "${SYSTEMD_OVERRIDE_DIR}/resources.conf" << 'EOF'
 [Service]
 Environment=NODE_OPTIONS=--max-old-space-size=1536
 MemoryHigh=1536M
 MemoryMax=2G
 EOF
-        log_info "Resource limits applied (heap 1536M, hard limit 2G)."
-    fi
+    log_info "Resource limits applied (heap 1536M, hard limit 2G)."
 fi
 
 # Reload systemd and enable the service
