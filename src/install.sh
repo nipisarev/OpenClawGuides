@@ -431,7 +431,8 @@ if [[ "$ALREADY_INSTALLED" != true ]]; then
         openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
         openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
         openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
-        openclaw channels add telegram --token '${TELEGRAM_TOKEN}' 2>/dev/null || true
+        openclaw channels add telegram --token '${TELEGRAM_TOKEN}' 2>/dev/null || \
+        openclaw config set channels.telegram.token '${TELEGRAM_TOKEN}' 2>/dev/null || true
         openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
     " 2>/dev/null || log_warn "Some agent configuration steps may need manual attention."
 
