@@ -326,9 +326,35 @@ OPENCLAW_HOME=$(eval echo "~openclaw")
 OPENCLAW_PNPM_HOME=$(eval echo "~openclaw/.local/share/pnpm")
 export PATH="$OPENCLAW_PNPM_HOME:$PATH"
 
-# Skip Phase 4 config on re-runs — credentials already configured
+# On re-runs, verify and restore credentials (doctor --fix may reshuffle config)
 if [[ "$ALREADY_INSTALLED" == true ]]; then
-    log_info "Agent already configured — skipping Phase 4 credential setup."
+    log_info "Agent already configured — verifying credentials survive config changes."
+    sudo -u openclaw bash -c '
+        export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+        export PATH="$PNPM_HOME:$PATH"
+
+        # Ensure gateway auth token exists
+        EXISTING_TOKEN=$(openclaw config get gateway.auth.token 2>/dev/null || echo "")
+        if [[ -z "$EXISTING_TOKEN" || "$EXISTING_TOKEN" == "null" || "$EXISTING_TOKEN" == "REPLACE_WITH_GENERATED_TOKEN" ]]; then
+            NEW_TOKEN=$(openssl rand -hex 32)
+            openclaw config set gateway.auth.mode token 2>/dev/null || true
+            openclaw config set gateway.auth.token "$NEW_TOKEN" 2>/dev/null || true
+            echo "  [INFO] Generated new gateway auth token: $NEW_TOKEN"
+        fi
+
+        # Ensure Telegram channel token exists
+        TG_TOKEN=$(openclaw config get channels.telegram.token 2>/dev/null || echo "")
+        if [[ -z "$TG_TOKEN" || "$TG_TOKEN" == "null" ]]; then
+            echo "  [WARN] Telegram bot token missing from config."
+            echo "  [WARN] Re-add it with: openclaw channels add telegram --token YOUR_TOKEN"
+        fi
+
+        # Re-apply security settings (idempotent)
+        openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
+        openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
+        openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
+        openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
+    ' 2>/dev/null || log_warn "Credential verification had issues."
 else
     log_info "Configuring first agent..."
 
