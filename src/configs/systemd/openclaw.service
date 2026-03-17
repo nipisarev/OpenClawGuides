@@ -13,7 +13,6 @@ Environment=NODE_OPTIONS=--max-old-space-size=1536
 ExecStart=__OPENCLAW_BIN__ gateway run
 Restart=always
 RestartSec=5
-WatchdogSec=30
 
 # Hardening
 NoNewPrivileges=true

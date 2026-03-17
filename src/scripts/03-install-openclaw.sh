@@ -312,7 +312,6 @@ Environment=NODE_OPTIONS=--max-old-space-size=1536
 ExecStart=${OC_BIN} gateway run
 Restart=always
 RestartSec=5
-WatchdogSec=30
 
 # Hardening
 NoNewPrivileges=true
@@ -335,6 +334,12 @@ EOF
     fi
     systemctl daemon-reload
     systemctl enable openclaw 2>/dev/null
+    # Run doctor to apply pending fixes before restart
+    sudo -u "$OPENCLAW_USER" bash -c "
+        export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+        export PATH=\"\$PNPM_HOME:\$PATH\"
+        openclaw doctor --fix 2>/dev/null || true
+    "
     systemctl restart openclaw
     log_success "systemd unit updated and restarted."
 else
@@ -362,7 +367,6 @@ Environment=NODE_OPTIONS=--max-old-space-size=1536
 ExecStart=${OC_BIN} gateway run
 Restart=always
 RestartSec=5
-WatchdogSec=30
 
 # Hardening
 NoNewPrivileges=true
@@ -408,9 +412,6 @@ else
 Environment=NODE_OPTIONS=--max-old-space-size=1536
 MemoryHigh=1536M
 MemoryMax=2G
-WatchdogSec=30
-Restart=always
-RestartSec=5
 EOF
         log_info "Resource limits applied (heap 1536M, hard limit 2G)."
     fi
@@ -424,6 +425,14 @@ systemctl is-enabled --quiet openclaw || {
     exit 1
 }
 log_success "OpenClaw systemd service installed and enabled."
+
+# Run doctor to apply any pending fixes before first start
+log_info "Running openclaw doctor --fix..."
+sudo -u "$OPENCLAW_USER" bash -c "
+    export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+    export PATH=\"\$PNPM_HOME:\$PATH\"
+    openclaw doctor --fix 2>/dev/null || true
+"
 
 # ── Step 8: Session isolation ────────────────────────────────────────────────
 step 8 $TOTAL_STEPS "Verifying session isolation"
