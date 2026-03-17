@@ -348,14 +348,12 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
                     openai)    openclaw config set agents.defaults.model 'openai/gpt-4o' 2>/dev/null || true ;;
                 esac
 
-                # Restore API key via onboard (config set doesn't work for credentials)
+                # Restore API key in config env section
                 [[ -n '${CRED_API_KEY:-}' ]] && {
                     if [[ '${CRED_AI_PROVIDER:-anthropic}' == 'anthropic' ]]; then
-                        openclaw onboard --non-interactive --anthropic-api-key '${CRED_API_KEY:-}' --skip-skills 2>/dev/null || \
-                        openclaw onboard --anthropic-api-key '${CRED_API_KEY:-}' 2>/dev/null || true
+                        openclaw config set env.ANTHROPIC_API_KEY '${CRED_API_KEY:-}' 2>/dev/null || true
                     elif [[ '${CRED_AI_PROVIDER:-}' == 'openai' ]]; then
-                        openclaw onboard --non-interactive --openai-api-key '${CRED_API_KEY:-}' --skip-skills 2>/dev/null || \
-                        openclaw onboard --openai-api-key '${CRED_API_KEY:-}' 2>/dev/null || true
+                        openclaw config set env.OPENAI_API_KEY '${CRED_API_KEY:-}' 2>/dev/null || true
                     fi
                 }
 
@@ -443,13 +441,11 @@ if [[ "$ALREADY_INSTALLED" != true ]]; then
         openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
         openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
 
-        # Set API key via onboard (config set doesn't work for credentials)
+        # Set API key in config env section (the correct location per OpenClaw docs)
         if [[ '${AI_PROVIDER}' == 'anthropic' ]]; then
-            openclaw onboard --non-interactive --anthropic-api-key '${API_KEY}' --skip-skills 2>/dev/null || \
-            openclaw onboard --anthropic-api-key '${API_KEY}' 2>/dev/null || true
+            openclaw config set env.ANTHROPIC_API_KEY '${API_KEY}' 2>/dev/null || true
         elif [[ '${AI_PROVIDER}' == 'openai' ]]; then
-            openclaw onboard --non-interactive --openai-api-key '${API_KEY}' --skip-skills 2>/dev/null || \
-            openclaw onboard --openai-api-key '${API_KEY}' 2>/dev/null || true
+            openclaw config set env.OPENAI_API_KEY '${API_KEY}' 2>/dev/null || true
         fi
 
         # Set Telegram token (--channel flag required, not positional arg)
