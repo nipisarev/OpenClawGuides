@@ -156,19 +156,25 @@ sudo -u "$OPENCLAW_USER" mkdir -p "$OPENCLAW_DIR"
 
 if [[ -f "$OPENCLAW_CONFIG" ]]; then
     log_warn "Configuration file already exists at ${OPENCLAW_CONFIG} — skipping overwrite."
-    # Ensure critical settings exist on re-run
+    # Ensure critical settings on re-run
     sudo -u "$OPENCLAW_USER" bash -c "
         export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
         export PATH=\"\$PNPM_HOME:\$PATH\"
         openclaw config set gateway.mode local 2>/dev/null || true
+        openclaw config delete channels.telegram.groupPolicy 2>/dev/null || true
     "
     log_info "Verified critical gateway settings."
 else
     # Check for template in the repo
     CONFIG_TEMPLATE="${SCRIPT_DIR}/../configs/openclaw.json5"
+    AUTH_TOKEN=$(openssl rand -hex 32)
     if [[ -f "$CONFIG_TEMPLATE" ]]; then
         sudo -u "$OPENCLAW_USER" cp "$CONFIG_TEMPLATE" "$OPENCLAW_CONFIG"
+        # Replace placeholder token with a real generated token
+        sed -i "s|REPLACE_WITH_GENERATED_TOKEN|${AUTH_TOKEN}|g" "$OPENCLAW_CONFIG"
         log_info "Deployed config from template."
+        echo -e "  ${YELLOW}IMPORTANT:${NC} Save this token securely — you need it to access the Control UI:"
+        echo -e "  ${BOLD}${AUTH_TOKEN}${NC}"
     else
         # Generate auth token
         AUTH_TOKEN=$(openssl rand -hex 32)
