@@ -334,43 +334,87 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
     if [[ -f "$CRED_BACKUP" ]]; then
         log_info "Restoring credentials from backup..."
         source "$CRED_BACKUP"
-        sudo -u openclaw bash -c "
-            export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
-            export PATH=\"\$PNPM_HOME:\$PATH\"
+        if [[ -z "${CRED_TELEGRAM_TOKEN:-}" || -z "${CRED_API_KEY:-}" ]]; then
+            log_warn "Backup file exists but has empty credentials — will re-prompt."
+            rm -f "$CRED_BACKUP"
+        else
+            sudo -u openclaw bash -c "
+                export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+                export PATH=\"\$PNPM_HOME:\$PATH\"
 
-            # Restore AI model and key
-            [[ -n '${CRED_AI_MODEL:-}' ]] && openclaw config set agents.defaults.model '${CRED_AI_MODEL:-}' 2>/dev/null || true
-            [[ -n '${CRED_API_KEY:-}' && -n '${CRED_KEY_NAME:-}' ]] && openclaw config set 'agents.defaults.credentials.${CRED_KEY_NAME:-}' '${CRED_API_KEY:-}' 2>/dev/null || true
+                # Restore AI model and key
+                [[ -n '${CRED_AI_MODEL:-}' ]] && openclaw config set agents.defaults.model '${CRED_AI_MODEL:-}' 2>/dev/null || true
+                [[ -n '${CRED_API_KEY:-}' && -n '${CRED_KEY_NAME:-}' ]] && openclaw config set 'agents.defaults.credentials.${CRED_KEY_NAME:-}' '${CRED_API_KEY:-}' 2>/dev/null || true
 
-            # Restore Telegram channel
-            [[ -n '${CRED_TELEGRAM_TOKEN:-}' ]] && {
-                openclaw channels add telegram --token '${CRED_TELEGRAM_TOKEN:-}' 2>/dev/null || \
-                openclaw config set channels.telegram.token '${CRED_TELEGRAM_TOKEN:-}' 2>/dev/null || true
-            }
+                # Restore Telegram channel
+                [[ -n '${CRED_TELEGRAM_TOKEN:-}' ]] && {
+                    openclaw channels add telegram --token '${CRED_TELEGRAM_TOKEN:-}' 2>/dev/null || \
+                    openclaw config set channels.telegram.token '${CRED_TELEGRAM_TOKEN:-}' 2>/dev/null || true
+                }
 
-            # Ensure gateway auth token
-            EXISTING=\$(openclaw config get gateway.auth.token 2>/dev/null || echo '')
-            if [[ -z \"\$EXISTING\" || \"\$EXISTING\" == 'null' || \"\$EXISTING\" == 'REPLACE_WITH_GENERATED_TOKEN' ]]; then
-                if [[ -n '${CRED_AUTH_TOKEN:-}' ]]; then
-                    openclaw config set gateway.auth.mode token 2>/dev/null || true
-                    openclaw config set gateway.auth.token '${CRED_AUTH_TOKEN:-}' 2>/dev/null || true
-                else
-                    NEW_TOKEN=\$(openssl rand -hex 32)
-                    openclaw config set gateway.auth.mode token 2>/dev/null || true
-                    openclaw config set gateway.auth.token \"\$NEW_TOKEN\" 2>/dev/null || true
+                # Ensure gateway auth token
+                EXISTING=\$(openclaw config get gateway.auth.token 2>/dev/null || echo '')
+                if [[ -z \"\$EXISTING\" || \"\$EXISTING\" == 'null' || \"\$EXISTING\" == 'REPLACE_WITH_GENERATED_TOKEN' ]]; then
+                    if [[ -n '${CRED_AUTH_TOKEN:-}' ]]; then
+                        openclaw config set gateway.auth.mode token 2>/dev/null || true
+                        openclaw config set gateway.auth.token '${CRED_AUTH_TOKEN:-}' 2>/dev/null || true
+                    else
+                        NEW_TOKEN=\$(openssl rand -hex 32)
+                        openclaw config set gateway.auth.mode token 2>/dev/null || true
+                        openclaw config set gateway.auth.token \"\$NEW_TOKEN\" 2>/dev/null || true
+                    fi
                 fi
-            fi
 
-            # Re-apply security settings (idempotent)
-            openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
-            openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
-            openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
-            openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
-        " 2>/dev/null || log_warn "Credential restoration had issues."
-        log_success "Credentials restored from backup."
+                # Re-apply security settings (idempotent)
+                openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
+                openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
+                openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
+                openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
+            " 2>/dev/null || log_warn "Credential restoration had issues."
+            log_success "Credentials restored from backup."
+        fi
+    fi
+
+    if [[ -f "$CRED_BACKUP" ]]; then
+        : # Already restored above
     else
-        log_warn "No credential backup found — re-running first-time setup."
-        # Fall through to fresh setup below
+        log_warn "No credential backup found — need to re-enter credentials."
+        echo ""
+        echo -e "  ${BOLD}AI Provider${NC}"
+        echo -e "    1) Anthropic (Claude)"
+        echo -e "    2) OpenAI (GPT-4o)"
+        echo ""
+        read -rp "$(echo -e "${BLUE}?${NC} Choose provider [1]: ")" AI_CHOICE < /dev/tty
+        AI_CHOICE="${AI_CHOICE:-1}"
+        case "$AI_CHOICE" in
+            1)
+                AI_PROVIDER="anthropic"
+                AI_MODEL="anthropic/claude-sonnet-4-20250514"
+                KEY_NAME="anthropicApiKey"
+                ;;
+            2)
+                AI_PROVIDER="openai"
+                AI_MODEL="openai/gpt-4o"
+                KEY_NAME="openaiApiKey"
+                ;;
+            *)
+                log_error "Invalid choice. Run the installer again."
+                exit 1
+                ;;
+        esac
+        echo ""
+        read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY < /dev/tty
+        if [[ -z "$API_KEY" ]]; then
+            log_error "API key cannot be empty."
+            exit 1
+        fi
+        echo ""
+        read -rp "$(echo -e "${BLUE}?${NC} Telegram bot token (123456789:AAF...): ")" TELEGRAM_TOKEN < /dev/tty
+        if [[ -z "$TELEGRAM_TOKEN" ]]; then
+            log_error "Telegram bot token cannot be empty."
+            exit 1
+        fi
+        echo ""
         ALREADY_INSTALLED=false
     fi
 fi
@@ -403,6 +447,7 @@ if [[ "$ALREADY_INSTALLED" != true ]]; then
     echo -e "  ${BOLD}${GW_AUTH_TOKEN}${NC}"
 
     # Save credentials to backup file (survives doctor --fix reshuffles)
+    mkdir -p "$(dirname "$CRED_BACKUP")"
     cat > "$CRED_BACKUP" << CREDEOF
 # OpenClaw credential backup — auto-generated, do not edit
 # Used by installer re-runs to restore credentials after config changes
