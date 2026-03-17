@@ -342,14 +342,23 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
                 export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
                 export PATH=\"\$PNPM_HOME:\$PATH\"
 
-                # Restore AI model and key
+                # Restore AI model
                 [[ -n '${CRED_AI_MODEL:-}' ]] && openclaw config set agents.defaults.model '${CRED_AI_MODEL:-}' 2>/dev/null || true
-                [[ -n '${CRED_API_KEY:-}' && -n '${CRED_KEY_NAME:-}' ]] && openclaw config set 'agents.defaults.credentials.${CRED_KEY_NAME:-}' '${CRED_API_KEY:-}' 2>/dev/null || true
 
-                # Restore Telegram channel
+                # Restore API key via onboard (config set doesn't work for credentials)
+                [[ -n '${CRED_API_KEY:-}' ]] && {
+                    if [[ '${CRED_AI_PROVIDER:-anthropic}' == 'anthropic' ]]; then
+                        openclaw onboard --non-interactive --anthropic-api-key '${CRED_API_KEY:-}' --skip-skills 2>/dev/null || \
+                        openclaw onboard --anthropic-api-key '${CRED_API_KEY:-}' 2>/dev/null || true
+                    elif [[ '${CRED_AI_PROVIDER:-}' == 'openai' ]]; then
+                        openclaw onboard --non-interactive --openai-api-key '${CRED_API_KEY:-}' --skip-skills 2>/dev/null || \
+                        openclaw onboard --openai-api-key '${CRED_API_KEY:-}' 2>/dev/null || true
+                    fi
+                }
+
+                # Restore Telegram channel (--channel flag required, not positional arg)
                 [[ -n '${CRED_TELEGRAM_TOKEN:-}' ]] && {
-                    openclaw channels add telegram --token '${CRED_TELEGRAM_TOKEN:-}' 2>/dev/null || \
-                    openclaw config set channels.telegram.token '${CRED_TELEGRAM_TOKEN:-}' 2>/dev/null || true
+                    openclaw channels add --channel telegram --token '${CRED_TELEGRAM_TOKEN:-}' 2>/dev/null || true
                 }
 
                 # Ensure gateway auth token
@@ -427,13 +436,21 @@ if [[ "$ALREADY_INSTALLED" != true ]]; then
         export PATH=\"\$PNPM_HOME:\$PATH\"
 
         openclaw config set agents.defaults.model '${AI_MODEL}' 2>/dev/null || true
-        openclaw config set 'agents.defaults.credentials.${KEY_NAME}' '${API_KEY}' 2>/dev/null || true
         openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
-        openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
         openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
-        openclaw channels add telegram --token '${TELEGRAM_TOKEN}' 2>/dev/null || \
-        openclaw config set channels.telegram.token '${TELEGRAM_TOKEN}' 2>/dev/null || true
         openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
+
+        # Set API key via onboard (config set doesn't work for credentials)
+        if [[ '${AI_PROVIDER}' == 'anthropic' ]]; then
+            openclaw onboard --non-interactive --anthropic-api-key '${API_KEY}' --skip-skills 2>/dev/null || \
+            openclaw onboard --anthropic-api-key '${API_KEY}' 2>/dev/null || true
+        elif [[ '${AI_PROVIDER}' == 'openai' ]]; then
+            openclaw onboard --non-interactive --openai-api-key '${API_KEY}' --skip-skills 2>/dev/null || \
+            openclaw onboard --openai-api-key '${API_KEY}' 2>/dev/null || true
+        fi
+
+        # Set Telegram token (--channel flag required, not positional arg)
+        openclaw channels add --channel telegram --token '${TELEGRAM_TOKEN}' 2>/dev/null || true
     " 2>/dev/null || log_warn "Some agent configuration steps may need manual attention."
 
     # Generate gateway auth token
@@ -452,6 +469,7 @@ if [[ "$ALREADY_INSTALLED" != true ]]; then
     cat > "$CRED_BACKUP" << CREDEOF
 # OpenClaw credential backup — auto-generated, do not edit
 # Used by installer re-runs to restore credentials after config changes
+CRED_AI_PROVIDER='${AI_PROVIDER}'
 CRED_AI_MODEL='${AI_MODEL}'
 CRED_KEY_NAME='${KEY_NAME}'
 CRED_API_KEY='${API_KEY}'
