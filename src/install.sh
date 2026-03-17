@@ -326,84 +326,95 @@ OPENCLAW_HOME=$(eval echo "~openclaw")
 OPENCLAW_PNPM_HOME=$(eval echo "~openclaw/.local/share/pnpm")
 export PATH="$OPENCLAW_PNPM_HOME:$PATH"
 
-# On re-runs, restore credentials saved by Phase 3 (doctor --fix may lose them)
+# Credential backup file — survives config reshuffles from doctor --fix
+CRED_BACKUP="${OPENCLAW_HOME}/.openclaw/.credentials.env"
+
 if [[ "$ALREADY_INSTALLED" == true ]]; then
-    log_info "Agent already configured — restoring credentials after config changes."
-    sudo -u openclaw bash -c "
-        export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
-        export PATH=\"\$PNPM_HOME:\$PATH\"
+    # Re-run: restore from backup file, or prompt if backup missing
+    if [[ -f "$CRED_BACKUP" ]]; then
+        log_info "Restoring credentials from backup..."
+        source "$CRED_BACKUP"
+        sudo -u openclaw bash -c "
+            export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+            export PATH=\"\$PNPM_HOME:\$PATH\"
 
-        # Restore gateway auth token (saved by Phase 3 or generate new)
-        SAVED_AUTH='${SAVED_AUTH_TOKEN:-}'
-        EXISTING_TOKEN=\$(openclaw config get gateway.auth.token 2>/dev/null || echo '')
-        if [[ -z \"\$EXISTING_TOKEN\" || \"\$EXISTING_TOKEN\" == 'null' || \"\$EXISTING_TOKEN\" == 'REPLACE_WITH_GENERATED_TOKEN' ]]; then
-            if [[ -n \"\$SAVED_AUTH\" ]]; then
-                openclaw config set gateway.auth.mode token 2>/dev/null || true
-                openclaw config set gateway.auth.token \"\$SAVED_AUTH\" 2>/dev/null || true
-                echo '  [OK] Restored gateway auth token from backup.'
-            else
-                NEW_TOKEN=\$(openssl rand -hex 32)
-                openclaw config set gateway.auth.mode token 2>/dev/null || true
-                openclaw config set gateway.auth.token \"\$NEW_TOKEN\" 2>/dev/null || true
-                echo \"  [INFO] Generated new gateway auth token: \$NEW_TOKEN\"
+            # Restore AI model and key
+            [[ -n '${CRED_AI_MODEL:-}' ]] && openclaw config set agents.defaults.model '${CRED_AI_MODEL:-}' 2>/dev/null || true
+            [[ -n '${CRED_API_KEY:-}' && -n '${CRED_KEY_NAME:-}' ]] && openclaw config set 'agents.defaults.credentials.${CRED_KEY_NAME:-}' '${CRED_API_KEY:-}' 2>/dev/null || true
+
+            # Restore Telegram channel
+            [[ -n '${CRED_TELEGRAM_TOKEN:-}' ]] && {
+                openclaw channels add telegram --token '${CRED_TELEGRAM_TOKEN:-}' 2>/dev/null || \
+                openclaw config set channels.telegram.token '${CRED_TELEGRAM_TOKEN:-}' 2>/dev/null || true
+            }
+
+            # Ensure gateway auth token
+            EXISTING=\$(openclaw config get gateway.auth.token 2>/dev/null || echo '')
+            if [[ -z \"\$EXISTING\" || \"\$EXISTING\" == 'null' || \"\$EXISTING\" == 'REPLACE_WITH_GENERATED_TOKEN' ]]; then
+                if [[ -n '${CRED_AUTH_TOKEN:-}' ]]; then
+                    openclaw config set gateway.auth.mode token 2>/dev/null || true
+                    openclaw config set gateway.auth.token '${CRED_AUTH_TOKEN:-}' 2>/dev/null || true
+                else
+                    NEW_TOKEN=\$(openssl rand -hex 32)
+                    openclaw config set gateway.auth.mode token 2>/dev/null || true
+                    openclaw config set gateway.auth.token \"\$NEW_TOKEN\" 2>/dev/null || true
+                fi
             fi
-        fi
 
-        # Restore Telegram channel token (saved by Phase 3)
-        SAVED_TG='${SAVED_TG_TOKEN:-}'
-        TG_TOKEN=\$(openclaw config get channels.telegram.token 2>/dev/null || echo '')
-        if [[ -z \"\$TG_TOKEN\" || \"\$TG_TOKEN\" == 'null' ]]; then
-            if [[ -n \"\$SAVED_TG\" ]]; then
-                openclaw channels add telegram --token \"\$SAVED_TG\" 2>/dev/null || \
-                    openclaw config set channels.telegram.token \"\$SAVED_TG\" 2>/dev/null || true
-                echo '  [OK] Restored Telegram bot token from backup.'
-            else
-                echo '  [WARN] Telegram bot token missing and no backup found.'
-                echo '  [WARN] Re-add it with: openclaw channels add telegram --token YOUR_TOKEN'
-            fi
-        fi
+            # Re-apply security settings (idempotent)
+            openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
+            openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
+            openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
+            openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
+        " 2>/dev/null || log_warn "Credential restoration had issues."
+        log_success "Credentials restored from backup."
+    else
+        log_warn "No credential backup found — re-running first-time setup."
+        # Fall through to fresh setup below
+        ALREADY_INSTALLED=false
+    fi
+fi
 
-        # Restore AI model and API key if missing
-        SAVED_MODEL_VAL='${SAVED_MODEL:-}'
-        SAVED_KEY='${SAVED_API_KEY:-}'
-        SAVED_KEY_NAME='${SAVED_API_KEY_NAME:-}'
-        if [[ -n \"\$SAVED_MODEL_VAL\" ]]; then
-            openclaw config set agents.defaults.model \"\$SAVED_MODEL_VAL\" 2>/dev/null || true
-        fi
-        if [[ -n \"\$SAVED_KEY\" && -n \"\$SAVED_KEY_NAME\" ]]; then
-            openclaw config set \"agents.defaults.credentials.\$SAVED_KEY_NAME\" \"\$SAVED_KEY\" 2>/dev/null || true
-        fi
-
-        # Re-apply security settings (idempotent)
-        openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
-        openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
-        openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
-        openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
-    " 2>/dev/null || log_warn "Credential restoration had issues."
-else
+if [[ "$ALREADY_INSTALLED" != true ]]; then
     log_info "Configuring first agent..."
 
     sudo -u openclaw bash -c "
         export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
         export PATH=\"\$PNPM_HOME:\$PATH\"
 
-        # Set AI model
         openclaw config set agents.defaults.model '${AI_MODEL}' 2>/dev/null || true
-
-        # Set API key
         openclaw config set 'agents.defaults.credentials.${KEY_NAME}' '${API_KEY}' 2>/dev/null || true
+        openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
+        openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
+        openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
+        openclaw channels add telegram --token '${TELEGRAM_TOKEN}' 2>/dev/null || true
+        openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
+    " 2>/dev/null || log_warn "Some agent configuration steps may need manual attention."
 
-        # Set security defaults
-    openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
-    openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
-    openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
+    # Generate gateway auth token
+    GW_AUTH_TOKEN=$(openssl rand -hex 32)
+    sudo -u openclaw bash -c "
+        export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+        export PATH=\"\$PNPM_HOME:\$PATH\"
+        openclaw config set gateway.auth.mode token 2>/dev/null || true
+        openclaw config set gateway.auth.token '${GW_AUTH_TOKEN}' 2>/dev/null || true
+    " 2>/dev/null || true
+    echo -e "  ${YELLOW}IMPORTANT:${NC} Save this gateway auth token:"
+    echo -e "  ${BOLD}${GW_AUTH_TOKEN}${NC}"
 
-    # Add Telegram channel
-    openclaw channels add telegram --token '${TELEGRAM_TOKEN}' 2>/dev/null || true
-
-    # Disable link previews
-    openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
-" 2>/dev/null || log_warn "Some agent configuration steps may need manual attention."
+    # Save credentials to backup file (survives doctor --fix reshuffles)
+    cat > "$CRED_BACKUP" << CREDEOF
+# OpenClaw credential backup — auto-generated, do not edit
+# Used by installer re-runs to restore credentials after config changes
+CRED_AI_MODEL='${AI_MODEL}'
+CRED_KEY_NAME='${KEY_NAME}'
+CRED_API_KEY='${API_KEY}'
+CRED_TELEGRAM_TOKEN='${TELEGRAM_TOKEN}'
+CRED_AUTH_TOKEN='${GW_AUTH_TOKEN}'
+CREDEOF
+    chown openclaw:openclaw "$CRED_BACKUP"
+    chmod 600 "$CRED_BACKUP"
+    log_info "Credentials backed up to ${CRED_BACKUP} (600 — owner only)."
 fi
 
 # Start/restart the Gateway

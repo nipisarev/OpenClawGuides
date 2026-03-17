@@ -157,30 +157,6 @@ sudo -u "$OPENCLAW_USER" mkdir -p "$OPENCLAW_DIR"
 if [[ -f "$OPENCLAW_CONFIG" ]]; then
     log_warn "Configuration file already exists at ${OPENCLAW_CONFIG} — skipping overwrite."
 
-    # Save existing credentials before config changes (doctor --fix may lose them)
-    SAVED_TG_TOKEN=""
-    SAVED_API_KEY=""
-    SAVED_API_KEY_NAME=""
-    SAVED_AUTH_TOKEN=""
-    SAVED_MODEL=""
-    for cfg in "${OPENCLAW_DIR}/openclaw.json" "${OPENCLAW_DIR}/openclaw.json5"; do
-        if [[ -f "$cfg" ]]; then
-            if [[ -z "$SAVED_TG_TOKEN" ]]; then
-                SAVED_TG_TOKEN=$(grep -oP '"token"\s*:\s*"\K[0-9]+:[^"]+' "$cfg" 2>/dev/null | head -1 || true)
-            fi
-            if [[ -z "$SAVED_AUTH_TOKEN" ]]; then
-                SAVED_AUTH_TOKEN=$(grep -oP '"token"\s*:\s*"\K[a-f0-9]{64}' "$cfg" 2>/dev/null | head -1 || true)
-            fi
-            if [[ -z "$SAVED_API_KEY" ]]; then
-                SAVED_API_KEY=$(grep -oP '"(anthropicApiKey|openaiApiKey)"\s*:\s*"\K[^"]+' "$cfg" 2>/dev/null | head -1 || true)
-                SAVED_API_KEY_NAME=$(grep -oP '"(anthropicApiKey|openaiApiKey)"' "$cfg" 2>/dev/null | head -1 | tr -d '"' || true)
-            fi
-            if [[ -z "$SAVED_MODEL" ]]; then
-                SAVED_MODEL=$(grep -oP '"model"\s*:\s*"\K[^"]+' "$cfg" 2>/dev/null | head -1 || true)
-            fi
-        fi
-    done
-
     # Ensure critical settings on re-run
     sudo -u "$OPENCLAW_USER" bash -c "
         export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
@@ -194,9 +170,6 @@ if [[ -f "$OPENCLAW_CONFIG" ]]; then
         fi
     done
     log_info "Verified critical gateway settings."
-
-    # Export saved credentials for Phase 4 to restore
-    export SAVED_TG_TOKEN SAVED_API_KEY SAVED_API_KEY_NAME SAVED_AUTH_TOKEN SAVED_MODEL
 else
     # Check for template in the repo
     CONFIG_TEMPLATE="${SCRIPT_DIR}/../configs/openclaw.json5"
