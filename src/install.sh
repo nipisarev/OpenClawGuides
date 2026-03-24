@@ -5,7 +5,7 @@ set -euo pipefail
 # OpenClaw Hardened VPS Installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/nipisarev/OpenClawGuides/main/src/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nipisarev/openclaw-hardened/main/src/install.sh | bash
 #
 # This is the main entry point that:
 #   1. Detects the OS (Ubuntu 22.04+ or Debian 12+)
@@ -90,7 +90,7 @@ apply_profile() {
 TOTAL_PHASES=4
 INSTALL_DIR="/opt/openclaw-guides"
 SCRIPTS_DIR="${INSTALL_DIR}/src/scripts"
-REPO_URL="https://github.com/nipisarev/OpenClawGuides.git"
+REPO_URL="https://github.com/nipisarev/openclaw-hardened.git"
 
 # ── Preflight checks ────────────────────────────────────────────────────────
 
@@ -349,7 +349,7 @@ if [[ ! -d "$INSTALL_DIR" ]]; then
         git clone "$REPO_URL" "$INSTALL_DIR" 2>/dev/null || {
             log_warn "git clone failed. Trying tarball download..."
             mkdir -p "$INSTALL_DIR"
-            curl -fsSL "https://github.com/nipisarev/OpenClawGuides/archive/refs/heads/main.tar.gz" | \
+            curl -fsSL "https://github.com/nipisarev/openclaw-hardened/archive/refs/heads/main.tar.gz" | \
                 tar -xz --strip-components=1 -C "$INSTALL_DIR" 2>/dev/null || {
                     log_error "Failed to download the repository. Check your internet connection."
                     exit 1
@@ -359,7 +359,7 @@ if [[ ! -d "$INSTALL_DIR" ]]; then
         # git not installed yet — use curl + tar
         log_info "git not available yet. Downloading tarball..."
         mkdir -p "$INSTALL_DIR"
-        curl -fsSL "https://github.com/nipisarev/OpenClawGuides/archive/refs/heads/main.tar.gz" | \
+        curl -fsSL "https://github.com/nipisarev/openclaw-hardened/archive/refs/heads/main.tar.gz" | \
             tar -xz --strip-components=1 -C "$INSTALL_DIR" 2>/dev/null || {
                 log_error "Failed to download the repository."
                 exit 1
@@ -470,6 +470,7 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
                 openclaw config set agents.defaults.tools.profile minimal 2>/dev/null || true
                 openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
                 openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
+                openclaw config set discovery.mdns.mode off 2>/dev/null || true
             " 2>/dev/null || log_warn "Credential restoration had issues."
             log_success "Credentials restored from backup."
         fi
@@ -532,6 +533,7 @@ if [[ "$ALREADY_INSTALLED" != true ]]; then
         openclaw config set agents.defaults.sandbox.mode all 2>/dev/null || true
         openclaw config set session.dmScope per-channel-peer 2>/dev/null || true
         openclaw config set channels.telegram.linkPreview false 2>/dev/null || true
+        openclaw config set discovery.mdns.mode off 2>/dev/null || true
 
         # Set API key in config env section (the correct location per OpenClaw docs)
         if [[ '${AI_PROVIDER}' == 'anthropic' ]]; then

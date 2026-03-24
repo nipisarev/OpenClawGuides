@@ -117,7 +117,7 @@ fi
 # ── Step 4: Install essential packages ───────────────────────────────────────
 step 4 $TOTAL_STEPS "Installing essential packages"
 
-ESSENTIAL_PKGS=(curl git wget jq unzip htop software-properties-common apt-transport-https ca-certificates gnupg lsb-release)
+ESSENTIAL_PKGS=(curl git wget jq unzip htop python3 software-properties-common apt-transport-https ca-certificates gnupg lsb-release)
 MISSING_PKGS=()
 
 for pkg in "${ESSENTIAL_PKGS[@]}"; do
