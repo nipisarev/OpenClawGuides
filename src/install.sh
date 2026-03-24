@@ -223,7 +223,8 @@ else
     # AI Provider
     echo -e "${BOLD}AI Provider${NC}"
     echo -e "  1) Anthropic (Claude) — recommended"
-    echo -e "  2) OpenAI (GPT-4o)"
+    echo -e "  2) OpenAI (GPT-4o) — API key"
+    echo -e "  3) OpenAI Codex (ChatGPT Plus/Pro) — OAuth, flat rate"
     echo ""
     read -rp "$(echo -e "${BLUE}?${NC} Choose provider [1]: ")" AI_CHOICE < /dev/tty
     AI_CHOICE="${AI_CHOICE:-1}"
@@ -241,17 +242,28 @@ else
             KEY_NAME="openaiApiKey"
             echo -e "  Get your key at: ${BLUE}https://platform.openai.com${NC} > API keys"
             ;;
+        3)
+            AI_PROVIDER="openai-codex"
+            AI_MODEL="openai/gpt-4o"
+            KEY_NAME=""
+            echo -e "  ${YELLOW}Note:${NC} OAuth login will happen after OpenClaw is installed."
+            echo -e "  You'll need to open a URL in your browser and log in with your ChatGPT account."
+            ;;
         *)
             log_error "Invalid choice. Run the installer again."
             exit 1
             ;;
     esac
 
-    echo ""
-    read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY < /dev/tty
-    if [[ -z "$API_KEY" ]]; then
-        log_error "API key cannot be empty."
-        exit 1
+    if [[ "$AI_PROVIDER" != "openai-codex" ]]; then
+        echo ""
+        read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY < /dev/tty
+        if [[ -z "$API_KEY" ]]; then
+            log_error "API key cannot be empty."
+            exit 1
+        fi
+    else
+        API_KEY=""
     fi
     echo ""
 
@@ -434,8 +446,8 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
 
                 # Set AI model to latest recommended version (ignore stale backup value)
                 case '${CRED_AI_PROVIDER:-anthropic}' in
-                    anthropic) openclaw config set agents.defaults.model 'anthropic/claude-sonnet-4-6' 2>/dev/null || true ;;
-                    openai)    openclaw config set agents.defaults.model 'openai/gpt-4o' 2>/dev/null || true ;;
+                    anthropic)     openclaw config set agents.defaults.model 'anthropic/claude-sonnet-4-6' 2>/dev/null || true ;;
+                    openai|openai-codex) openclaw config set agents.defaults.model 'openai/gpt-4o' 2>/dev/null || true ;;
                 esac
 
                 # Restore API key in config env section
@@ -483,7 +495,8 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
         echo ""
         echo -e "  ${BOLD}AI Provider${NC}"
         echo -e "    1) Anthropic (Claude)"
-        echo -e "    2) OpenAI (GPT-4o)"
+        echo -e "    2) OpenAI (GPT-4o) — API key"
+        echo -e "    3) OpenAI Codex (ChatGPT Plus/Pro) — OAuth"
         echo ""
         read -rp "$(echo -e "${BLUE}?${NC} Choose provider [1]: ")" AI_CHOICE < /dev/tty
         AI_CHOICE="${AI_CHOICE:-1}"
@@ -498,16 +511,25 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
                 AI_MODEL="openai/gpt-4o"
                 KEY_NAME="openaiApiKey"
                 ;;
+            3)
+                AI_PROVIDER="openai-codex"
+                AI_MODEL="openai/gpt-4o"
+                KEY_NAME=""
+                ;;
             *)
                 log_error "Invalid choice. Run the installer again."
                 exit 1
                 ;;
         esac
-        echo ""
-        read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY < /dev/tty
-        if [[ -z "$API_KEY" ]]; then
-            log_error "API key cannot be empty."
-            exit 1
+        if [[ "$AI_PROVIDER" != "openai-codex" ]]; then
+            echo ""
+            read -rp "$(echo -e "${BLUE}?${NC} API key: ")" API_KEY < /dev/tty
+            if [[ -z "$API_KEY" ]]; then
+                log_error "API key cannot be empty."
+                exit 1
+            fi
+        else
+            API_KEY=""
         fi
         echo ""
         read -rp "$(echo -e "${BLUE}?${NC} Telegram bot token (123456789:AAF...): ")" TELEGRAM_TOKEN < /dev/tty
@@ -545,6 +567,19 @@ if [[ "$ALREADY_INSTALLED" != true ]]; then
         # Set Telegram token (--channel flag required, not positional arg)
         openclaw channels add --channel telegram --token '${TELEGRAM_TOKEN}' 2>/dev/null || true
     " 2>/dev/null || log_warn "Some agent configuration steps may need manual attention."
+
+    # OpenAI Codex OAuth login (interactive — requires browser)
+    if [[ "${AI_PROVIDER}" == "openai-codex" ]]; then
+        echo ""
+        echo -e "  ${BOLD}${YELLOW}OpenAI Codex OAuth Login${NC}"
+        echo -e "  A URL will appear below. Open it in your browser and log in with your ChatGPT account."
+        echo ""
+        sudo -u openclaw bash -c "
+            export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+            export PATH=\"\$PNPM_HOME:\$PATH\"
+            openclaw models auth login --provider openai-codex
+        " < /dev/tty || log_warn "OAuth login may need to be completed manually: openclaw models auth login --provider openai-codex"
+    fi
 
     # Generate gateway auth token
     GW_AUTH_TOKEN=$(openssl rand -hex 32)
