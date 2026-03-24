@@ -1,0 +1,33 @@
+// Profile: full
+// Description: All features enabled for single-user personal assistant
+//
+// What this unlocks (on top of the hardened base config):
+//   - Full tool profile (all tools available)
+//   - Read-write workspace access
+//   - Plugins enabled
+//
+// What stays locked (from base config — never overridden):
+//   - gateway.bind: loopback
+//   - gateway.auth.mode: token
+//   - agents.defaults.sandbox.mode: all (Docker isolation)
+//   - session.dmScope: per-channel-peer
+//   - browser.evaluateEnabled: false (IDPI risk)
+//   - skills.autoInstall: false (requires manual audit)
+//   - logging.redactSensitive: tools
+//   - discovery.mdns.mode: off
+//   - commands.config: false
+{
+  "agents": {
+    "defaults": {
+      "tools": {
+        "profile": "full"
+      },
+      "sandbox": {
+        "workspaceAccess": "rw"
+      }
+    }
+  },
+  "plugins": {
+    "enabled": true
+  }
+}

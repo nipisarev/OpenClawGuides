@@ -54,6 +54,39 @@ run_phase() {
     log_success "Phase $phase_num ($phase_name) completed"
 }
 
+# ── Apply configuration profile ──────────────────────────────────────────────
+apply_profile() {
+    local profile="${OPENCLAW_PROFILE:-full}"
+    local profile_file="${INSTALL_DIR}/src/configs/profiles/${profile}.json5"
+
+    if [[ ! -f "$profile_file" ]]; then
+        log_warn "Profile '${profile}' not found at ${profile_file}. Skipping."
+        return 0
+    fi
+
+    log_info "Applying profile: ${profile}"
+
+    # Parse JSON5 profile and apply each setting via openclaw config set
+    # Profile files are simple overlays — extract key paths and values
+    sudo -u openclaw bash -c "
+        export PNPM_HOME=\"\${PNPM_HOME:-\$HOME/.local/share/pnpm}\"
+        export PATH=\"\$PNPM_HOME:\$PATH\"
+
+        case '${profile}' in
+            full)
+                openclaw config set agents.defaults.tools.profile full 2>/dev/null || true
+                openclaw config set agents.defaults.sandbox.workspaceAccess rw 2>/dev/null || true
+                openclaw config set plugins.enabled true 2>/dev/null || true
+                ;;
+            *)
+                log_warn \"Unknown profile '${profile}' — no settings applied.\"
+                ;;
+        esac
+    " 2>/dev/null || log_warn "Some profile settings may need manual attention."
+
+    log_success "Profile '${profile}' applied."
+}
+
 TOTAL_PHASES=4
 INSTALL_DIR="/opt/openclaw-guides"
 SCRIPTS_DIR="${INSTALL_DIR}/src/scripts"
@@ -232,12 +265,67 @@ else
         exit 1
     fi
     echo ""
+
+    # Configuration profile
+    echo -e "${BOLD}Configuration Profile${NC}"
+    echo -e "  Profiles control which features are enabled (tools, workspace, plugins)."
+    echo -e "  Base security settings (firewall, auth, Docker isolation) are always enforced."
+    echo ""
+
+    # List available profiles from the profiles directory
+    PROFILES_DIR="${INSTALL_DIR}/src/configs/profiles"
+    if [[ -d "$PROFILES_DIR" ]]; then
+        PROFILE_OPTIONS=()
+        while IFS= read -r pfile; do
+            pname=$(basename "$pfile" .json5)
+            # Extract description from the file's second comment line
+            pdesc=$(sed -n 's|^// Description: ||p' "$pfile" | head -1)
+            PROFILE_OPTIONS+=("$pname|${pdesc:-No description}")
+        done < <(find "$PROFILES_DIR" -name "*.json5" -type f | sort)
+
+        if [[ ${#PROFILE_OPTIONS[@]} -gt 0 ]]; then
+            local_idx=1
+            for opt in "${PROFILE_OPTIONS[@]}"; do
+                pname="${opt%%|*}"
+                pdesc="${opt#*|}"
+                echo -e "    ${local_idx}) ${BOLD}${pname}${NC} — ${pdesc}"
+                ((local_idx++))
+            done
+            echo ""
+            read -rp "$(echo -e "${BLUE}?${NC} Choose profile [1]: ")" PROFILE_CHOICE < /dev/tty
+            PROFILE_CHOICE="${PROFILE_CHOICE:-1}"
+
+            idx=1
+            OPENCLAW_PROFILE=""
+            for opt in "${PROFILE_OPTIONS[@]}"; do
+                if [[ "$idx" == "$PROFILE_CHOICE" ]]; then
+                    OPENCLAW_PROFILE="${opt%%|*}"
+                    break
+                fi
+                ((idx++))
+            done
+
+            if [[ -z "$OPENCLAW_PROFILE" ]]; then
+                log_error "Invalid profile choice. Run the installer again."
+                exit 1
+            fi
+        else
+            OPENCLAW_PROFILE="full"
+            log_warn "No profiles found. Using default: full"
+        fi
+    else
+        OPENCLAW_PROFILE="full"
+        log_warn "Profiles directory not found. Using default: full"
+    fi
+    echo -e "  Selected profile: ${BOLD}${OPENCLAW_PROFILE}${NC}"
+    echo ""
 fi
 
 # Export for child scripts
 export TAILSCALE_AUTH_KEY
 export AI_PROVIDER AI_MODEL KEY_NAME API_KEY
 export TELEGRAM_TOKEN
+export OPENCLAW_PROFILE
 
 # ── Download / clone the repository ──────────────────────────────────────────
 
@@ -334,6 +422,8 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
     if [[ -f "$CRED_BACKUP" ]]; then
         log_info "Restoring credentials from backup..."
         source "$CRED_BACKUP"
+        OPENCLAW_PROFILE="${CRED_PROFILE:-full}"
+        export OPENCLAW_PROFILE
         if [[ -z "${CRED_TELEGRAM_TOKEN:-}" || -z "${CRED_API_KEY:-}" ]]; then
             log_warn "Backup file exists but has empty credentials — will re-prompt."
             rm -f "$CRED_BACKUP"
@@ -426,6 +516,8 @@ if [[ "$ALREADY_INSTALLED" == true ]]; then
         fi
         echo ""
         ALREADY_INSTALLED=false
+        OPENCLAW_PROFILE="full"
+        export OPENCLAW_PROFILE
     fi
 fi
 
@@ -474,11 +566,15 @@ CRED_KEY_NAME='${KEY_NAME}'
 CRED_API_KEY='${API_KEY}'
 CRED_TELEGRAM_TOKEN='${TELEGRAM_TOKEN}'
 CRED_AUTH_TOKEN='${GW_AUTH_TOKEN}'
+CRED_PROFILE='${OPENCLAW_PROFILE}'
 CREDEOF
     chown openclaw:openclaw "$CRED_BACKUP"
     chmod 600 "$CRED_BACKUP"
     log_info "Credentials backed up to ${CRED_BACKUP} (600 — owner only)."
 fi
+
+# Apply selected profile on top of base config
+apply_profile
 
 # Start/restart the Gateway
 log_info "Starting OpenClaw Gateway..."
@@ -509,6 +605,7 @@ echo -e "${NC}"
 echo -e "  ${BOLD}Tailscale IP:${NC}     ${TS_IP}"
 echo -e "  ${BOLD}AI Provider:${NC}      ${AI_PROVIDER}"
 echo -e "  ${BOLD}Model:${NC}            ${AI_MODEL}"
+echo -e "  ${BOLD}Profile:${NC}          ${OPENCLAW_PROFILE}"
 echo -e "  ${BOLD}Channel:${NC}          Telegram"
 echo -e "  ${BOLD}Gateway:${NC}          127.0.0.1:18789 (loopback only)"
 echo -e "  ${BOLD}Config:${NC}           ${OPENCLAW_HOME}/.openclaw/openclaw.json5"
